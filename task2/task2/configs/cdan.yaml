@@ -1,51 +1,20 @@
-# =============================================================================
-# cdan.yaml  — CDAN: class-conditional adversarial alignment (Step 4)
-# -----------------------------------------------------------------------------
-# ML CONCEPT — CDAN (Conditional Adversarial Domain Adaptation, Long et al. 2018):
-#   DANN aligns only the MARGINAL feature distribution, which can accidentally
-#   line up different classes across domains (a horse-sketch next to a dog-photo).
-#   CDAN conditions the discriminator on the CLASSIFIER'S PREDICTION too, via the
-#   MULTILINEAR MAP:  g(x) = vec(f  (x)  p),  the outer product of the 512-d
-#   feature f and the 7-d softmax probability p, flattened. Aligning g couples
-#   'where in feature space' with 'which class', so the model is pushed to align
-#   semantically corresponding regions rather than just the overall blob.
-# =============================================================================
+
 inherit: base.yaml
 
 method:
   name: cdan
-  # Spec: "Feed g(x) to a discriminator with the same hidden width, activation,
-  # dropout, gradient-reversal schedule, and loss weight used for DANN." So the
-  # discriminator hyperparameters MIRROR dann.yaml exactly.
+  
   disc_hidden: 256
   disc_dropout: 0.5
   domain_loss_weight: 1.0
   grl_gamma: 10.0
   grl_max_alpha: 1.0
-  # Spec: "Do not use entropy conditioning or detach f or p in the required
-  # implementation." So: NO entropy weighting, and gradients flow through BOTH
-  # f and p into the multilinear map. These flags document that requirement and
-  # are enforced in methods/cdan.py.
+  
   use_entropy_conditioning: false
   detach_features: false
   detach_probs: false
-  # -----------------------------------------------------------------------------
-  # MULTILINEAR-MAP SCALE NORMALIZATION (numerical stability, spec-compliant).
-  # -----------------------------------------------------------------------------
-  # ML CONCEPT — WHY NORMALIZE g = vec(f  p):
-  #   The discriminator input is the outer product of the 512-d feature f and the
-  #   7-d softmax p, flattened to 3584 dims. Because ResNet features are NOT unit-
-  #   scaled, the raw outer product can be large in magnitude, so the very first
-  #   strong-alpha adversarial step overshoots and training diverges (this is what
-  #   caused the CDAN loss to spike to ~3.5e5 and collapse). Normalizing the map to
-  #   unit L2 norm per example keeps the discriminator input in a stable range.
-  #   IMPORTANT — this is NOT one of the forbidden operations: it is not entropy
-  #   conditioning, and it does not detach f or p (gradients still flow through
-  #   BOTH), so it keeps the required implementation intact. It only rescales the
-  #   conditioning vector, exactly as stabilized CDAN implementations do.
-  #   Set false to reproduce the raw (unstable) behaviour.
+  
   normalize_multilinear: true
 
-# CDAN is not the method used for the controlled study; leave it disabled here.
 controlled_study:
   enabled: false

@@ -1,23 +1,4 @@
-# =============================================================================
-# task3/run_task3.py
-# -----------------------------------------------------------------------------
-# TOP-LEVEL ORCHESTRATOR for Task 3, in the order the assignment prescribes:
-#   1. ERM baseline      (reuse Task 2's Source-only checkpoint if provided,
-#                         otherwise train an equivalent ERM under the same config)
-#   2. DAN-DG            (pairwise source MMD)
-#   3. SAM               (sharpness-aware minimization)
-#   4. Final evaluation + diagnostics (Sketch loaded only here) + per-class study
-#   5. Controlled study  (DAN-DG lambda sweep by default)
-# Also plots the classification / MMD-penalty training curves (required evidence).
-#
-# HOW TO RUN (from inside task3/):
-#   python run_task3.py                                  # train all + evaluate + study
-#   python run_task3.py --erm_checkpoint /path/source_only.pt   # reuse Task 2 ERM
-#   python run_task3.py --skip_train                     # only evaluate saved ckpts
-#
-# The strict ordering (all training + selection frozen BEFORE Sketch is touched)
-# is enforced by evaluating Sketch only in step 4.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -44,12 +25,7 @@ METHOD_CONFIGS = {
 
 
 def plot_loss_curves(results_dir):
-    """Plot classification vs MMD-penalty loss per method (required evidence).
-
-    Spec: "Training curves that include classification loss and, where
-    applicable, the MMD penalty." ERM/SAM have no alignment term (flat 0);
-    DAN-DG's loss_align is the pairwise-source MMD penalty.
-    """
+  
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -62,7 +38,7 @@ def plot_loss_curves(results_dir):
             hist = json.load(f)
         logs = hist.get("step_logs", [])
         if not logs:
-            continue                                    # e.g. ERM loaded from Task 2
+            continue                                    
         steps = list(range(len(logs)))
         cls = [l.get("loss_cls", np.nan) for l in logs]
         align = [l.get("loss_align", np.nan) for l in logs]
@@ -92,7 +68,6 @@ def main():
         for name, cfg_path in METHOD_CONFIGS.items():
             print(f"\n########## TRAIN: {name} ##########")
             cfg = load_config(cfg_path)
-            # let the CLI inject the Task 2 ERM checkpoint for the ERM run
             if name == "erm" and args.erm_checkpoint:
                 cfg["paths"]["task2_erm_checkpoint"] = args.erm_checkpoint
             train_one_config(cfg)

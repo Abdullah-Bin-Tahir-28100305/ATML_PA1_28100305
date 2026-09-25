@@ -1,24 +1,4 @@
-# =============================================================================
-# task4/extract_outputs.py
-# -----------------------------------------------------------------------------
-# PURPOSE: the SCORE-EXTRACTION stage. For a fixed, selected checkpoint, run the
-# model ONCE over every evaluation set and cache the raw outputs:
-#   * CIFAR-10 TRAIN (clean/unaugmented) features + labels  -> for Mahalanobis fit
-#   * CIFAR-10 VAL   logits + features                      -> threshold calibration
-#   * CIFAR-10 TEST  logits + features + labels             -> known eval
-#   * NEAR unknown   logits + features                      -> unknown eval
-#   * FAR  unknown   logits + features                      -> unknown eval
-# For PROSER we also cache the DUMMY logits; for RPL the distance-logits.
-#
-# WHY A SEPARATE EXTRACTION STAGE (spec):
-#   "Keep dataset construction, model training, score extraction, and evaluation
-#   separate so that every score receives identical examples." Caching the outputs
-#   once and scoring from the cache guarantees MSP/MLS/Energy/Mahalanobis all read
-#   EXACTLY the same logits/features (spec: "All four scores must use exactly the
-#   same saved logits and features.").
-#
-# LINKS: models/resnet_cifar, methods/{proser,rpl}, data/*; feeds evaluate_osr.py.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -42,11 +22,7 @@ from torch.utils.data import DataLoader, Subset
 
 @torch.no_grad()
 def _run(model, loader, device, method):
-    """Return dict of stacked numpy outputs for a loader.
-
-    Always returns 'logits', 'features', 'labels'. Adds 'dummy' for PROSER and
-    'dist' (distance-logits) for RPL.
-    """
+    
     model.eval()
     out = {"logits": [], "features": [], "labels": [], "dummy": [], "dist": []}
     for imgs, labels in loader:
@@ -96,7 +72,6 @@ def _load_model(cfg, ckpt_path, device):
 
 
 def extract_for_checkpoint(cfg, run_name):
-    """Extract + cache all outputs for one checkpoint into cache/<run_name>.npz."""
     set_seed(cfg["seed"])
     device = get_device()
     cache_dir = ensure_dir(cfg["paths"]["cache_dir"])
@@ -104,7 +79,6 @@ def extract_for_checkpoint(cfg, run_name):
     model, method = _load_model(cfg, ckpt_path, device)
     bs = 256; nw = cfg["train"]["num_workers"]
 
-    # CIFAR-10 train (CLEAN) restricted to the TRAIN split -> Mahalanobis stats.
     train_clean = load_cifar10_train(cfg, train_transform=False)
     split = build_or_load_split(cfg, train_clean)
     train_sub = Subset(train_clean, split["train"])

@@ -1,17 +1,4 @@
-# =============================================================================
-# gcsc.yaml  — GCSC: stronger positive augmentation + MLS (Step 3)
-# -----------------------------------------------------------------------------
-# ML CONCEPT — GCSC ("Good Closed-Set Classifier"):
-#   Exactly the Vanilla recipe with ONE change: add RandAugment after the crop+
-#   flip. Stronger augmentation usually improves closed-set accuracy; the OSR
-#   question (Vaze et al. 2022) is whether that also improves REJECTION,
-#   especially for NEAR unknowns. Evaluated with MLS so it is directly comparable
-#   to Vanilla and PROSER under the same score.
-#
-# Spec: "insert RandAugment(num_ops=2, magnitude=9) after the crop and flip and
-# before conversion and normalization. Keep the initialization procedure,
-# optimizer, schedule, batch size, epochs, seed, and checkpoint rule unchanged."
-# =============================================================================
+
 inherit: base.yaml
 
 method:

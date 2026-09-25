@@ -1,26 +1,4 @@
-# =============================================================================
-# task4/evaluate_osr.py
-# -----------------------------------------------------------------------------
-# THE EVALUATION STAGE. From the cached outputs it produces every Required
-# Evidence item:
-#   (1) Table A: MSP / MLS / Energy / Mahalanobis on the FROZEN VANILLA model —
-#       near/far/all-unknown AUROC + validation-calibrated rejection (FPR@95TPR).
-#   (2) Table B: Vanilla / GCSC / PROSER using CSA + near/far OSR with MLS as the
-#       common score, plus a second PROSER row using its placeholder-based score.
-#   (3) A compact score-distribution / ROC figure for MSP, MLS, Mahalanobis.
-#   (4) Failure analysis: >=3 near + >=3 far unknowns wrongly accepted under the
-#       Vanilla MLS threshold, with class/prediction/score/threshold.
-#   (Optional) an RPL row if its cache is present.
-#
-# KEY PROTOCOL (spec, enforced here):
-#   * threshold tau = 95th percentile of unknownness on the KNOWN VAL set;
-#     accept when u(x) <= tau (uses known data only).
-#   * All four scores read the SAME cached logits/features.
-#   * CSA uses ONLY the 10 known logits (for PROSER too), keeping closed-set
-#     classification and rejection distinct.
-#
-# LINKS: scores/*, evaluation/{metrics,thresholds,failure_analysis}, methods/*.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -51,11 +29,7 @@ def _load_cache(cfg, run_name):
 
 
 def _score_all_splits(cache, score_fn, needs_features=False, maha_params=None):
-    """Apply a score function to val/test/near/far, returning a dict of arrays.
-
-    Uses the SAME cached logits (and features for Mahalanobis) for every split so
-    all scores operate on identical examples.
-    """
+   
     out = {}
     for split in ["val", "test", "near", "far"]:
         logits = cache[f"{split}_logits"]
@@ -68,11 +42,7 @@ def _score_all_splits(cache, score_fn, needs_features=False, maha_params=None):
 
 
 def _evaluate_score(cache, scores_by_split, cfg):
-    """Given per-split unknownness scores, compute AUROC + calibrated rejection.
-
-    Returns a dict with near/far/all AUROC and the operating-point metrics at the
-    validation-calibrated threshold (accept when u <= tau).
-    """
+  
     tau = calibrate_threshold(scores_by_split["val"], cfg["evaluation"]["tpr_target"])
     known_test = scores_by_split["test"]; near = scores_by_split["near"]; far = scores_by_split["far"]
     allu = np.concatenate([near, far])
@@ -94,9 +64,7 @@ def evaluate_all(cfg, include_rpl=False):
     results_dir = ensure_dir(cfg["paths"]["results_dir"])
     num_classes = cfg["known"]["num_classes"]
 
-    # =====================================================================
-    # TABLE A: four post-hoc scores on the FROZEN VANILLA model.
-    # =====================================================================
+    
     vanilla = _load_cache(cfg, "vanilla")
     if vanilla is None:
         raise FileNotFoundError("Missing cache for 'vanilla'; run extract_outputs first.")
@@ -120,9 +88,7 @@ def evaluate_all(cfg, include_rpl=False):
         dist_cache[sname] = s
     csa_vanilla = closed_set_accuracy(vanilla["test_logits"], vanilla["test_labels"])
 
-    # =====================================================================
-    # TABLE B: Vanilla / GCSC / PROSER with MLS (+ PROSER placeholder score).
-    # =====================================================================
+
     table_b = {}
     # Vanilla with MLS
     s_v = _score_all_splits(vanilla, mls.score)
@@ -136,38 +102,30 @@ def evaluate_all(cfg, include_rpl=False):
             "csa": closed_set_accuracy(gcsc["test_logits"], gcsc["test_labels"]),
             **_evaluate_score(gcsc, s_g, cfg)}
 
-    # PROSER with MLS on the 10 known logits (CSA from known logits only, spec).
     proser = _load_cache(cfg, "proser")
     if proser is not None:
         s_p_mls = _score_all_splits(proser, mls.score)
         table_b["PROSER (MLS)"] = {
             "csa": closed_set_accuracy(proser["test_logits"], proser["test_labels"]),
             **_evaluate_score(proser, s_p_mls, cfg)}
-        # PROSER placeholder-based detection score (dummy vs known).
         s_p_ph = {sp: proser_detection_score(proser[f"{sp}_logits"], proser[f"{sp}_dummy"])
                   for sp in ["val", "test", "near", "far"]}
         table_b["PROSER (placeholder)"] = {
             "csa": closed_set_accuracy(proser["test_logits"], proser["test_labels"]),
             **_evaluate_score(proser, s_p_ph, cfg)}
 
-    # Optional RPL row
     if include_rpl:
         rpl = _load_cache(cfg, "rpl")
         if rpl is not None:
             s_r = {sp: rpl_unknownness(rpl[f"{sp}_dist"]) for sp in ["val","test","near","far"]}
-            # CSA for RPL: argmax of distance-logits (spec's known-class score).
             table_b["RPL"] = {
                 "csa": closed_set_accuracy(rpl["test_logits"], rpl["test_labels"]),
                 **_evaluate_score(rpl, s_r, cfg)}
 
-    # =====================================================================
-    # FIGURE: score distributions for MSP, MLS, Mahalanobis (compact multi-panel).
-    # =====================================================================
+    
     _plot_score_distributions(dist_cache, ["MSP", "MLS", "Mahalanobis"], results_dir)
 
-    # =====================================================================
-    # FAILURE ANALYSIS: Vanilla MLS threshold; >=3 near + >=3 far accepted unknowns.
-    # =====================================================================
+  
     tau_mls = calibrate_threshold(s_v["val"], cfg["evaluation"]["tpr_target"])
     failures = {
         "near": collect_accepted_unknown_failures(
@@ -191,7 +149,6 @@ def evaluate_all(cfg, include_rpl=False):
 
 
 def _plot_score_distributions(dist_cache, score_names, results_dir):
-    """Multi-panel histogram of known-test vs near vs far unknownness scores."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

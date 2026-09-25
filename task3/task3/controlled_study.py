@@ -1,25 +1,4 @@
-# =============================================================================
-# task3/controlled_study.py  — Controlled Design Study (Step 5)
-# -----------------------------------------------------------------------------
-# PURPOSE: the ONE bounded sweep the assignment asks for, holding everything else
-# fixed. Default = the DAN-DG option: vary lambda_DG in {0.1, 1, 10}. (The SAM
-# option — vary rho in {0.01, 0.05, 0.1} — is supported by enabling it in
-# sam.yaml instead.)
-#
-# ML CONCEPT — TRADE-OFF vs ALIGNMENT/SHARPNESS STRENGTH (spec):
-#   "State your expected effect on source performance, the method-specific
-#    diagnostic, and Sketch performance before interpreting the results." For
-#   DAN-DG: too little lambda barely aligns sources; too much can over-align and
-#   erase class-discriminative structure. For SAM: rho controls the neighborhood
-#   size for the flatness objective. We trace source macro-F1, the method
-#   diagnostic (source-domain separability for DAN-DG; sharpness proxy for SAM),
-#   and Sketch accuracy across the sweep.
-#   CRITICAL (spec): "do not use Sketch results to replace these settings with a
-#   post-hoc winner." Sketch numbers here are for ANALYSIS ONLY; selection stays
-#   on source-validation.
-#
-# LINKS: train.train_one_config + the same evaluation utilities.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -61,7 +40,6 @@ def run_controlled_study(config_path):
     num_classes = cfg["dataset"]["num_classes"]
     results_dir = ensure_dir(cfg["paths"]["results_dir"])
 
-    # eval loaders (identical across sweep values)
     splits = build_or_load_splits(cfg)
     _, val_sets = make_source_datasets(cfg, splits, train=False)
     val_loaders = {d: DataLoader(ds, batch_size=64, shuffle=False, num_workers=2)

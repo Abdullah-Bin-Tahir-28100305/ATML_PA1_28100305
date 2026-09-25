@@ -1,37 +1,6 @@
-# =============================================================================
-# scripts/run_task1.py
-# -----------------------------------------------------------------------------
-# THE ORCHESTRATOR. This single entry point runs all six experiments IN ORDER,
-# exactly as the spec's "Steps" section lists them:
-#   1. Clean Baseline
-#   2. Color Bias        (grayscale + our additional color intervention)
-#   3. Shape vs Texture  (cue conflict; shape bias + coverage)
-#   4. Translation       (accuracy & consistency vs displacement)
-#   5. Patch Structure   (4x4 shuffle)
-#   6. Representation Analysis (cosine stability I_T + t-SNE/UMAP)
-# and writes every required piece of evidence to results/.
-#
-# DESIGN PRINCIPLE (spec): "Keep transformation generation separate from
-# evaluation so the exact same images can be reused across models." We build
-# each intervention's image tensors ONCE, then loop the models over the SAME
-# tensors. That guarantees ResNet/ViT/CLIP are compared on byte-identical inputs.
-#
-# HOW TO RUN:
-#   cd task1
-#   python scripts/run_task1.py           # runs everything, writes results/
-#   python scripts/run_task1.py --quick   # small smoke test (fewer images)
-#
-# LINKS: this file imports and coordinates EVERY other module:
-#   utils, data/make_subset, data/transforms, data/make_cue_conflicts,
-#   models/backbones, analysis/{evaluate_bias, feature_similarity, representation}.
-# =============================================================================
 
 import os
-# APPLE-SILICON (MPS) SAFETY NET: a few PyTorch ops don't yet have a native
-# Metal kernel. Setting this env var BEFORE importing torch tells PyTorch to
-# transparently run any such op on the CPU instead of crashing, so the whole
-# pipeline works on an M1/M2/M3 Mac. It has no effect on CUDA or CPU machines,
-# so it is safe to leave on everywhere.
+
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import sys
@@ -59,9 +28,7 @@ from analysis.feature_similarity import cosine_stability
 from analysis.representation import visualize_backbone
 
 
-# -----------------------------------------------------------------------------
-# Helper: stack a Subset/Dataset into one (images, labels) tensor pair.
-# -----------------------------------------------------------------------------
+
 def stack_dataset(ds):
     """Materialise a dataset into (images (N,3,224,224), labels (N,)) tensors.
 
@@ -81,9 +48,7 @@ def apply_transform_to_batch(images, fn):
     return torch.stack([fn(images[i]) for i in range(images.shape[0])])
 
 
-# -----------------------------------------------------------------------------
-# Helper: get predictions for one model on a batch of images.
-# -----------------------------------------------------------------------------
+
 @torch.no_grad()
 def predict(backbone, head, images, device, batch_size=128):
     """Return logits for a trained-head model. Batches to bound memory."""
@@ -105,9 +70,7 @@ def predict_clip_zeroshot(clip_backbone, images, class_names, device, batch_size
     return torch.cat(outs)
 
 
-# =============================================================================
-# MAIN
-# =============================================================================
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--quick", action="store_true",
@@ -127,9 +90,7 @@ def main():
     results_dir = ensure_dir(cfg["paths"]["results_dir"])
     print(f"[info] device={device}  results -> {results_dir}")
 
-    # -------------------------------------------------------------------------
-    # DATA: official train/test, stratified split, and the 500-image eval subset
-    # -------------------------------------------------------------------------
+    
     train_ds, test_ds, class_names = load_datasets(cfg)
     train_view, val_view = stratified_train_val_split(train_ds, cfg)
     eval_subset, sel_idx, imbalance = build_eval_subset(test_ds, cfg)
@@ -142,13 +103,9 @@ def main():
     print(f"[info] eval subset: {clean_images.shape[0]} images, "
           f"{len(class_names)} classes")
 
-    # -------------------------------------------------------------------------
-    # MODELS: build backbones and train one linear head per (trained) backbone
-    # -------------------------------------------------------------------------
+   
     backbones = build_backbones(cfg)               # dict name -> Backbone
-    # Move every backbone to the compute device ONCE. train_linear_head also does
-    # this, but we do it up front so feature extraction in later steps (which may
-    # run before/after training in any order) always has the backbone on-device.
+    
     for bb in backbones.values():
         bb.to(device)
     heads, head_info = {}, {}
@@ -158,15 +115,13 @@ def main():
         heads[name] = head
         head_info[name] = info                      # best val acc + history
 
-    # Master results container; serialized to JSON at the end.
     results = {"config": cfg, "class_names": class_names,
                "eval_subset_size": int(clean_images.shape[0]),
                "imbalance_report": imbalance,
                "head_info": {k: v["best_val_acc"] for k, v in head_info.items()},
                "experiments": {}}
 
-    # Convenience: get logits for ALL model 'heads' (trained heads + CLIP z-shot)
-    # on a given image tensor. Returns dict head_name -> logits.
+   
     def all_model_logits(images):
         out = {}
         for name, bb in backbones.items():
@@ -176,12 +131,7 @@ def main():
                 backbones["clip_vitb32"], images, class_names, device)
         return out
 
-    # =========================================================================
-    # STEP 1 — CLEAN BASELINE
-    # -------------------------------------------------------------------------
-    # Establishes the common reference. Every later intervention is compared both
-    # in ABSOLUTE terms and RELATIVE to this baseline (spec).
-    # =========================================================================
+    
     print("[step 1] clean baseline")
     clean_logits = all_model_logits(clean_images)
     clean_preds = {}
@@ -192,12 +142,7 @@ def main():
         clean_preds[hname] = pred                    # cached for consistency later
     results["experiments"]["clean_baseline"] = baseline
 
-    # =========================================================================
-    # STEP 2 — COLOR BIAS  (grayscale required + hue rotation additional)
-    # -------------------------------------------------------------------------
-    # Changes color while preserving geometry. We report accuracy change and
-    # prediction consistency vs the clean images for each color transform.
-    # =========================================================================
+    
     print("[step 2] color bias (grayscale + hue rotation)")
     color_results = {}
     color_transforms = {
@@ -219,12 +164,7 @@ def main():
         color_results[tname] = block
     results["experiments"]["color_bias"] = color_results
 
-    # =========================================================================
-    # STEP 3 — SHAPE vs TEXTURE  (cue conflict; shape bias + coverage)
-    # -------------------------------------------------------------------------
-    # Generate the conflict set ONCE (with accept/reject log), then classify
-    # each prediction as shape/texture/other and compute the two metrics.
-    # =========================================================================
+    
     print("[step 3] shape vs texture (cue conflict)")
     if args.quick:
         cfg["cue_conflict"]["target_valid"] = 24     # keep smoke test fast
@@ -241,12 +181,7 @@ def main():
             shape_results["models"][hname] = {**sb, "examples": examples}
     results["experiments"]["shape_vs_texture"] = shape_results
 
-    # =========================================================================
-    # STEP 4 — TRANSLATION  (accuracy & consistency vs displacement)
-    # -------------------------------------------------------------------------
-    # For each shift in {0,8,16,32} we translate in all four cardinal directions,
-    # evaluate each, and AVERAGE the metrics across directions (spec).
-    # =========================================================================
+    
     print("[step 4] translation")
     shifts = cfg["translation"]["shifts"]
     dirs = cfg["translation"]["directions"]
@@ -273,12 +208,7 @@ def main():
     results["experiments"]["translation"] = translation_results
     _plot_translation(translation_results, results_dir)
 
-    # =========================================================================
-    # STEP 5 — PATCH STRUCTURE  (4x4 shuffle, fixed permutation, reused)
-    # -------------------------------------------------------------------------
-    # One non-identity permutation from seed 6304, reused across models. We
-    # report accuracy drop and prediction consistency vs clean.
-    # =========================================================================
+    
     print("[step 5] patch shuffle")
     perm = make_patch_permutation(cfg["patch_shuffle"]["grid"], cfg["seed"])
     shuffled_images = apply_transform_to_batch(
@@ -294,31 +224,19 @@ def main():
         }
     results["experiments"]["patch_shuffle"] = patch_results
 
-    # =========================================================================
-    # STEP 6 — REPRESENTATION ANALYSIS  (cosine stability + projection plots)
-    # -------------------------------------------------------------------------
-    # For grayscale, cue conflict, translation (we use shift=16), and patch
-    # shuffle, measure I_T (cosine stability) and make a t-SNE/UMAP plot.
-    # NOTE: I_T is computed on the BACKBONE features, so CLIP appears ONCE here
-    # (its single image encoder), not split into head/zero-shot.
-    # =========================================================================
+    
     print("[step 6] representation analysis")
     # Prepare paired (clean, transformed) image sets for each required transform.
     gray_images = apply_transform_to_batch(clean_images, to_grayscale)
     trans16_images = apply_transform_to_batch(
         clean_images, lambda im: translate(im, 16, "right"))
-    # The spec lists FOUR transforms for representation analysis: grayscale,
-    # cue conflict, translation, and patch shuffling. Each entry is a triple
-    # (clean_set, transformed_set, labels) where the two image sets are aligned
-    # 1-to-1 (image i in clean pairs with image i in transformed).
+    
     stability_transforms = {
         "grayscale":     (clean_images, gray_images, clean_labels),
         "translation16": (clean_images, trans16_images, clean_labels),
         "patch_shuffle": (clean_images, shuffled_images, clean_labels),
     }
-    # Cue conflict pairs each STYLIZED image with its CONTENT (shape-source)
-    # image — same geometry, different texture — which is the natural clean
-    # counterpart. The generator stored these aligned content images for us.
+    
     if conflict_images.numel() > 0 and conflict["content_images"].numel() > 0:
         cc_labels = torch.tensor([m["shape_label"] for m in conflict_meta])
         stability_transforms["cue_conflict"] = (
@@ -335,18 +253,14 @@ def main():
                                cfg, tname, results_dir)
     results["experiments"]["representation_stability"] = rep_results
 
-    # -------------------------------------------------------------------------
-    # SAVE everything (numbers as JSON, plus a compact human-readable summary).
-    # -------------------------------------------------------------------------
+    
     with open(os.path.join(results_dir, "task1_results.json"), "w") as f:
         json.dump(_json_safe(results), f, indent=2)
     _write_summary_tables(results, results_dir)
     print(f"[done] all results written to {results_dir}")
 
 
-# -----------------------------------------------------------------------------
-# Small plotting + serialization helpers
-# -----------------------------------------------------------------------------
+
 def _plot_translation(translation_results, out_dir):
     """Plot accuracy and consistency vs displacement (required evidence)."""
     import matplotlib
@@ -384,11 +298,7 @@ def _json_safe(obj):
 
 
 def _write_summary_tables(results, out_dir):
-    """Write a compact CSV comparing clean/grayscale/additional-color/patch-shuffle.
-
-    This is the spec's first Required-Evidence item: "A compact comparison of
-    clean, grayscale, additional-color, and patch-shuffle performance."
-    """
+    
     import csv
     exp = results["experiments"]
     add_color = results["config"]["color"]["additional"]

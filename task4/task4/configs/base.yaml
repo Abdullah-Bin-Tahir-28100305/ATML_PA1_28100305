@@ -1,63 +1,30 @@
-# =============================================================================
-# base.yaml  — shared configuration for every Task 4 method (OSR)
-# -----------------------------------------------------------------------------
-# The four method configs (vanilla/gcsc/proser/rpl) inherit from this and
-# override only what differs, so the shared training recipe lives in ONE place.
-# Spec: "Use the same CIFAR-appropriate ResNet-18 architecture throughout Task 4"
-# and keep the recipe fixed unless a step explicitly changes it.
-#
-# ML CONCEPT — OPEN-SET RECOGNITION (OSR):
-#   A closed-set classifier assumes every test input is one of its known classes.
-#   OSR adds the ability to REJECT inputs that belong to no known class. We train
-#   on 10 known CIFAR-10 classes and, at test time, must both classify knowns and
-#   reject UNKNOWNS drawn from held-out CIFAR-100 classes.
-# =============================================================================
+
 
 seed: 6304
 
-# -----------------------------------------------------------------------------
-# KNOWN DATA — CIFAR-10 (all 10 classes are "known")
-# -----------------------------------------------------------------------------
+
 known:
   name: cifar10
-  root: ./data_cache        # torchvision auto-downloads CIFAR-10/100 here
+  root: ./data_cache        
   num_classes: 10
-  # Stratified 90/10 split of the OFFICIAL TRAIN partition (seed 6304). We
-  # optimize on the 90% train portion and select checkpoints by the 10% val
-  # accuracy; the full official TEST set is used for known-class evaluation.
+  
   train_frac: 0.9
 
-# -----------------------------------------------------------------------------
-# UNKNOWN DATA — fixed CIFAR-100 test classes (EVALUATION-ONLY)
-# -----------------------------------------------------------------------------
-# Spec: "Unknowns come from the following fixed CIFAR-100 test classes." Each
-# group has 800 images. The grouping is FIXED and may not be revised after seeing
-# results. CIFAR-100 images may NEVER be used for training/selection/score
-# design/threshold selection — they are evaluation-only.
-unknowns:
-  # Near-semantic unknowns: visually/semantically similar to CIFAR-10 classes
-  # (e.g. bus/truck-like vehicles, wolf/leopard-like animals) -> harder to reject.
-  near: [bus, pickup_truck, motorcycle, tractor, wolf, fox, leopard, camel]
-  # Far-semantic unknowns: little overlap with the known label space -> easier.
-  far:  [bottle, bowl, chair, clock, keyboard, mushroom, sunflower, wardrobe]
-  images_per_group: 800     # spec: each group contains 800 images
 
-# -----------------------------------------------------------------------------
-# IMAGE / AUGMENTATION (CIFAR native 32x32)
-# -----------------------------------------------------------------------------
-# Spec default (unless a step changes it): "random crop to 32x32 with 4-pixel
-# padding and random horizontal flipping." CIFAR normalization stats below.
+unknowns:
+  
+  near: [bus, pickup_truck, motorcycle, tractor, wolf, fox, leopard, camel]
+  far:  [bottle, bowl, chair, clock, keyboard, mushroom, sunflower, wardrobe]
+  images_per_group: 800     
+
+
 image:
   size: 32
   crop_padding: 4
   norm_mean: [0.4914, 0.4822, 0.4465]   # CIFAR-10 channel means
   norm_std:  [0.2470, 0.2435, 0.2616]   # CIFAR-10 channel stds
 
-# -----------------------------------------------------------------------------
-# OPTIMIZATION (Vanilla/GCSC recipe; PROSER/RPL override lr + epochs)
-# -----------------------------------------------------------------------------
-# Spec: "SGD with learning rate 0.1, momentum 0.9, weight decay 5e-4, and cosine
-# decay; batch size 128, 100 epochs, and seed 6304."
+
 train:
   optimizer: sgd
   lr: 0.1
@@ -68,16 +35,10 @@ train:
   epochs: 100
   num_workers: 2
 
-# -----------------------------------------------------------------------------
-# EVALUATION PROTOCOL
-# -----------------------------------------------------------------------------
-# Spec: threshold = 95th percentile of unknownness on the CIFAR-10 VALIDATION set;
-# accept x when u(x) <= tau. This accepts ~95% of knowns by construction, so the
-# unknown acceptance we report is exactly FPR@95TPR.
+
 evaluation:
   tpr_target: 0.95          # aim to accept 95% of known validation examples
-  # Mahalanobis covariance regularization (spec: "adding 1e-6 to every diagonal
-  # entry" of the shared diagonal covariance).
+  
   mahalanobis_eps: 0.000001
 
 method:

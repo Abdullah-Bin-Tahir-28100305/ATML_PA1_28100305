@@ -1,24 +1,4 @@
-# =============================================================================
-# task2/evaluate_final.py
-# -----------------------------------------------------------------------------
-# THE FINAL EVALUATION STAGE (spec Step 5, "Common Evaluation and Alignment
-# Diagnostic"). It runs ONLY AFTER every checkpoint is fixed and produces all the
-# Required Evidence:
-#   * a table comparing Source-only / DAN / DANN / CDAN on:
-#       - each source-validation domain (accuracy + macro-F1),
-#       - mean source accuracy + macro-F1,
-#       - target accuracy + macro-F1,
-#       - target accuracy CHANGE vs Source-only,
-#       - domain separability;
-#   * per-class target accuracy changes + dominant confusions (class_analysis).
-#
-# CRITICAL ORDERING RULE (spec): target labels are used ONLY here, after all
-# models/settings/checkpoints are frozen. Nothing in this file feeds back into
-# training or model selection.
-#
-# LINKS: loads checkpoints saved by train.py; uses evaluation/{metrics,
-# domain_separability, class_analysis}.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -48,7 +28,6 @@ from torch.utils.data import DataLoader
 
 
 def _load_model(ckpt_path, num_classes, device):
-    """Rebuild backbone+head and load a saved checkpoint's weights."""
     state = torch.load(ckpt_path, map_location=device, weights_only=False)
     backbone = ResNet18Backbone().to(device)
     head = ClassifierHead(backbone.feature_dim, num_classes).to(device)
@@ -59,19 +38,16 @@ def _load_model(ckpt_path, num_classes, device):
 
 
 def evaluate_all(cfg, method_names=("source_only", "dan", "dann", "cdan")):
-    """Evaluate every available method checkpoint and assemble the results."""
     set_seed(cfg["seed"])
     device = get_device()
     num_classes = cfg["dataset"]["num_classes"]
     results_dir = ensure_dir(cfg["paths"]["results_dir"])
     ckpt_dir = cfg["paths"]["checkpoints_dir"]
 
-    # ---- build eval loaders (clean transforms) ----
     splits = build_or_load_splits(cfg)
     _, val_sets = make_source_datasets(cfg, splits, train=False)
     val_loaders = {d: DataLoader(ds, batch_size=64, shuffle=False, num_workers=2)
                    for d, ds in val_sets.items()}
-    # Target with CLEAN transform for final labeled evaluation.
     target_set = make_target_dataset(cfg, train=False)
     target_loader = DataLoader(target_set, batch_size=64, shuffle=False, num_workers=2)
 
@@ -85,7 +61,6 @@ def evaluate_all(cfg, method_names=("source_only", "dan", "dann", "cdan")):
             continue
         backbone, head = _load_model(ckpt_path, num_classes, device)
 
-        # per-source-domain validation metrics
         per_domain = {}
         for d, ld in val_loaders.items():
             r = evaluate_loader(backbone, head, ld, device, num_classes)
@@ -97,10 +72,7 @@ def evaluate_all(cfg, method_names=("source_only", "dan", "dann", "cdan")):
         t = evaluate_loader(backbone, head, target_loader, device, num_classes)
         target_preds[name] = (t["preds"], t["labels"])
 
-        # domain separability diagnostic (frozen features, LogReg 70/30, C=1).
-        # We use the first source-val loader concatenated conceptually; the
-        # helper pulls equal counts from source-val and target loaders. To feed
-        # 'source-val features' we build a combined source-val loader.
+        
         combined_src_val = DataLoader(
             torch.utils.data.ConcatDataset(list(val_sets.values())),
             batch_size=64, shuffle=True, num_workers=2)
@@ -118,7 +90,6 @@ def evaluate_all(cfg, method_names=("source_only", "dan", "dann", "cdan")):
         print(f"[eval] {name:12s} src_f1={mean_src_f1:.3f} "
               f"tgt_top1={t['top1']:.3f} sep={sep['domain_separability']:.3f}")
 
-    # ---- target accuracy CHANGE vs source-only + per-class analysis ----
     if "source_only" in summary:
         base_top1 = summary["source_only"]["target_top1"]
         for name in summary:
@@ -138,7 +109,6 @@ def evaluate_all(cfg, method_names=("source_only", "dan", "dann", "cdan")):
                     preds, labels, num_classes, PACS_CLASSES),
             }
 
-    # ---- persist everything ----
     out = {"summary_table": summary, "class_analysis": class_report,
            "class_names": PACS_CLASSES}
     with open(os.path.join(results_dir, "task2_final_results.json"), "w") as f:
@@ -149,7 +119,6 @@ def evaluate_all(cfg, method_names=("source_only", "dan", "dann", "cdan")):
 
 
 def _write_summary_csv(summary, cfg, results_dir):
-    """Write the compact comparison table required as evidence, as CSV."""
     import csv
     src_domains = cfg["dataset"]["source_domains"]
     header = ["method"] + [f"{d}_val_top1" for d in src_domains] + \

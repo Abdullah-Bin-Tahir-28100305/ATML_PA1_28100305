@@ -1,26 +1,3 @@
-# =============================================================================
-# task2/run_task2.py
-# -----------------------------------------------------------------------------
-# TOP-LEVEL ORCHESTRATOR for Task 2. Runs the whole pipeline end to end, in the
-# order the assignment prescribes:
-#   1. Train Source-only ERM   (also the Task 3 ERM baseline)
-#   2. Train DAN  (MMD)
-#   3. Train DANN (adversarial)
-#   4. Train CDAN (conditional adversarial)
-#   5. Final common evaluation + alignment diagnostic (source/target/separability)
-#   6. Controlled alignment-strength study
-# It also plots the classification/alignment loss curves required as evidence.
-#
-# HOW TO RUN:
-#   cd task2
-#   python run_task2.py               # full pipeline (GPU strongly recommended)
-#   python run_task2.py --skip_train  # only re-run evaluation on saved checkpoints
-#
-# WHY AN ORCHESTRATOR: it guarantees the exact required order (all training and
-# checkpoint freezing BEFORE any target-label evaluation), which is a hard rule
-# of the assignment ("Freeze the complete experimental decision before final
-# target evaluation").
-# =============================================================================
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -48,13 +25,7 @@ METHOD_CONFIGS = {
 
 
 def plot_loss_curves(results_dir):
-    """Plot classification vs alignment loss over steps for each method.
-
-    Spec Required Evidence: "Classification and alignment or domain-loss curves
-    sufficient to assess whether each adaptation method trained as intended."
-    We read each method's history_<name>.json (written by train.py) and plot the
-    running per-step loss components.
-    """
+   
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -94,21 +65,17 @@ def main():
     base_cfg = load_config(METHOD_CONFIGS["source_only"])
     results_dir = ensure_dir(base_cfg["paths"]["results_dir"])
 
-    # ---- Steps 1-4: train each method through the SAME pipeline ----
     if not args.skip_train:
         for name, cfg_path in METHOD_CONFIGS.items():
             print(f"\n########## TRAIN: {name} ##########")
             cfg = load_config(cfg_path)
             train_one_config(cfg)
 
-    # ---- loss curves (required evidence) ----
     plot_loss_curves(results_dir)
 
-    # ---- Step 5: final common evaluation + diagnostic ----
     print("\n########## FINAL EVALUATION ##########")
     evaluate_all(base_cfg)
 
-    # ---- Step 6: controlled alignment-strength study (DAN lambda sweep) ----
     if not args.skip_study:
         print("\n########## CONTROLLED STUDY ##########")
         run_controlled_study(METHOD_CONFIGS["dan"])

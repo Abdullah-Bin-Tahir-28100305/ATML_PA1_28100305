@@ -1,66 +1,19 @@
-# =============================================================================
-# dan_dg.yaml  — DAN-DG: pairwise SOURCE-domain MMD alignment (Step 2)
-# -----------------------------------------------------------------------------
-# ML CONCEPT — DAN-DG (an adaptation of DAN for domain GENERALIZATION):
-#   Standard DAN (Task 2) aligns labeled SOURCE features with an UNLABELED
-#   TARGET. DAN-DG never touches the target (Sketch). Instead it applies the
-#   same MMD mechanism to every PAIR of observed SOURCE domains, encouraging the
-#   three source feature distributions to become mutually indistinguishable:
-#       L_DAN-DG = L_ERM + (lambda_DG / 3) * sum_{e<e'} MMD^2( F(X_e), F(X_e') ).
-#   There are C(3,2)=3 unordered source pairs, hence the /3 average. The bet:
-#   invariance learned ACROSS observed sources will transfer to the unseen
-#   Sketch domain (while risking that over-alignment mixes class structure).
-#
-# Same MMD implementation + kernels as Task 2 (spec), so the ONLY difference
-# from Task 2's DAN is *which* distributions are aligned (sources vs source+
-# target). This is what later lets you reason about the value of target access.
-# =============================================================================
+
 inherit: base.yaml
 
-# -----------------------------------------------------------------------------
-# DAN-DG STABILITY MEASURES (keep lambda_DG=1; justified on SOURCE-SIDE grounds).
-# -----------------------------------------------------------------------------
-# WHY THESE (and the source-side justification):
-#   At the prescribed optimizer (AdamW lr 1e-4) with lambda_DG=1, DAN-DG's SOURCE
-#   training collapsed: the classification loss stayed pinned at ~ln(7)=1.95
-#   (uniform-guess CE) from step 1 and source-validation macro-F1 sat at ~0.05,
-#   BELOW the 1/7 chance line. This is a diagnosis from SOURCE-ONLY signals (the
-#   training loss curve and source-val F1) — Sketch is never consulted — so it is
-#   a legitimate model-selection observation, not a target-driven ("post-hoc
-#   winner") choice, which the spec forbids. The collapse mechanism: at lr 1e-4
-#   the pairwise-source-MMD gradient overpowers the classification gradient in
-#   the first steps and drives features to a near-constant (which trivially makes
-#   the three source domains identical, killing class information) before the
-#   classifier can learn. Two measures counter this WITHOUT changing lambda_DG:
-#     * mmd_warmup_steps: ramp the MMD weight 0->1 over the first N updates so the
-#       classifier establishes useful features before alignment pressure engages
-#       (analogous to DANN's alpha schedule). The FINAL weight is still
-#       lambda_DG=1, so the prescribed objective is what the model converges under.
-#     * a lower learning rate for DAN-DG only: smaller steps let the
-#       classification signal keep pace with the MMD gradient instead of being
-#       overrun. This is a declared deviation from the shared optimizer, made for
-#       numerical stability of the joint objective, justified on source-side
-#       evidence. lambda_DG stays at the mandated 1.
-#   Set mmd_warmup_steps=0 and remove the train.lr override to reproduce the
-#   original (collapsing) prescribed-setting run.
+
 train:
-  lr: 0.00003                       # base is 1e-4; lower for DAN-DG stability only
+  lr: 0.00003                       
 
 method:
   name: dan_dg
-  # Spec: "For the main comparison, use lambda_DG = 1."  (UNCHANGED)
   lambda_dg: 1.0
-  # Same three RBF kernels as Task 2: bandwidths 0.5/1/2 x median pairwise
-  # squared distance for each domain pair in the current batch.
+  
   rbf_bandwidth_multipliers: [0.5, 1.0, 2.0]
-  # MMD warm-up: ramp the alignment weight 0->1 over this many steps (final
-  # weight = lambda_DG = 1). ~1 epoch of warm-up. 0 disables (original behaviour).
+ 
   mmd_warmup_steps: 150
 
-# CONTROLLED DESIGN STUDY (Step 5) — one of two options. We choose the DAN-DG
-# option: vary lambda_DG over {0.1, 1, 10}. (The SAM option is in sam.yaml.)
-# Spec: "The main comparison must continue to use lambda_DG = 1 and rho = 0.05;
-# do not use Sketch results to replace these settings with a post-hoc winner."
+
 controlled_study:
   enabled: true
   sweep_param: lambda_dg

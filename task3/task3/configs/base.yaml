@@ -1,19 +1,4 @@
-# =============================================================================
-# base.yaml  — shared configuration for every Task 3 method (DG)
-# -----------------------------------------------------------------------------
-# Task 3 REUSES the Task 2 PACS protocol EXACTLY (spec: "Use exactly the same
-# source training/validation splits, ResNet-18 initialization, seven-class
-# classifier head, preprocessing, augmentation, domain-balanced sampling,
-# optimizer settings, epoch budget, early stopping rule, and seed 6304.").
-# So this base mirrors Task 2's base, and the method files (erm/dan_dg/sam)
-# override only their method-specific knobs.
-#
-# ML CONCEPT — DOMAIN GENERALIZATION (DG):
-#   Unlike Task 2 (UDA), the target domain (Sketch) is COMPLETELY UNAVAILABLE
-#   during training and model selection. We train only on Photo/Art/Cartoon and
-#   ask whether the model generalizes to an unseen domain. Sketch is loaded ONLY
-#   by evaluate_sketch.py, after every decision is frozen.
-# =============================================================================
+
 
 seed: 6304
 
@@ -21,7 +6,6 @@ dataset:
   name: pacs
   root: ./data_cache/PACS
   num_classes: 7
-  # In DG, Sketch is the UNSEEN target: never loaded during training/selection.
   target_domain: sketch
   source_domains: [photo, art_painting, cartoon]
 
@@ -35,33 +19,28 @@ split:
   train_frac: 0.8
   val_frac: 0.2
 
-# Optimization is identical to Task 2 (controlled comparison).
 train:
   optimizer: adamw
   lr: 0.0001
   weight_decay: 0.0001
   max_epochs: 30
   early_stop_patience: 5
-  per_source_batch: 8              # 8 images from EACH of the 3 source domains
-  # NOTE: Task 3 has NO target batch (Sketch is unavailable during training).
+  per_source_batch: 8              
 
-# Same frozen-BatchNorm policy as Task 2 (running stats frozen at ImageNet
-# values; gamma/beta trainable). Required for both DAN-DG and both SAM passes.
+
 freeze_bn_running_stats: true
 
-# Source-domain separability: 3-way logistic regression (Photo/Art/Cartoon),
-# chance = 33.3% (spec). Same 70/30 split, C=1, seed 6304 as Task 2's 2-way one.
+
 domain_separability:
   test_frac: 0.30
   C: 1.0
   class_weight: balanced
   max_features_per_group: 1500
 
-# Sharpness proxy (spec): fixed validation batch of 32 examples PER SOURCE
-# (seed 6304), model in eval mode, one normalized gradient-ascent step, rho=0.05.
+
 sharpness:
-  batch_per_source: 32             # 32 examples from each source
-  rho: 0.05                        # perturbation radius for the proxy
+  batch_per_source: 32             
+  rho: 0.05                        
 
 method:
   name: erm
@@ -70,8 +49,5 @@ paths:
   results_dir: ./results
   checkpoints_dir: ./results/checkpoints
   shared_splits: ../shared/splits/pacs_sketch_seed6304.json
-  # If you ran Task 2 and want to reuse its Source-only checkpoint AS the ERM
-  # baseline (spec: "load its saved checkpoint rather than retraining"), point
-  # this at that file. If left null / missing, Task 3 trains an equivalent ERM
-  # under the identical config (same protocol, so it matches Task 2's Source-only).
+  
   task2_erm_checkpoint: null

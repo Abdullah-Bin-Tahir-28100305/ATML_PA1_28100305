@@ -1,179 +1,76 @@
-# =============================================================================
-# config.yaml
-# -----------------------------------------------------------------------------
-# CENTRAL CONFIGURATION FILE for Task 1 (Inductive Biases and Feature
-# Representations).
-#
-# WHY A CONFIG FILE AT ALL?
-#   The assignment (page 1, "Instructions") explicitly requires that we
-#   "Fix random seeds where practical, record all reported hyperparameters,
-#   and preserve the configurations used to produce your results."
-#   Putting every knob in ONE file (instead of hard-coding numbers scattered
-#   across ten Python scripts) is exactly how you satisfy that requirement:
-#   this single file *is* the recorded, reproducible configuration. Anyone can
-#   read it and know precisely how your numbers were produced.
-#
-# ML CONCEPT — REPRODUCIBILITY:
-#   A machine-learning result is only meaningful if someone else (or future
-#   you) can regenerate it. Random seeds control every source of
-#   pseudo-randomness (data splitting, weight init of the linear head, the
-#   patch permutation, subset sampling). Fixing them turns a stochastic
-#   pipeline into a deterministic one.
-# =============================================================================
 
-# -----------------------------------------------------------------------------
-# GLOBAL SEED
-# -----------------------------------------------------------------------------
-# The assignment mandates seed 6304 for: the 80/20 train/val split, the
-# classifier-head comparison, the 500-image test subset selection, and the
-# patch permutation. We store it once and reuse it everywhere so there is a
-# single source of truth.
 seed: 6304
 
-# -----------------------------------------------------------------------------
-# DATASET
-# -----------------------------------------------------------------------------
-# We pick STL-10 because the assignment marks it "(recommended): ten distinct
-# object classes and lower computational cost." Ten classes keeps the
-# cue-conflict class-pair combinatorics manageable and the whole pipeline runs
-# on modest hardware.
+
 dataset:
-  name: stl10            # one of: stl10 | oxford_pets  (code supports both)
-  root: ./data_cache     # where torchvision downloads the raw dataset
-  num_classes: 10        # STL-10 has exactly 10 object classes
+  name: stl10            
+  root: ./data_cache     
+  num_classes: 10        
 
-# -----------------------------------------------------------------------------
-# IMAGE GEOMETRY
-# -----------------------------------------------------------------------------
-# The assignment says: "Construct interventions on a common 224x224 RGB image
-# before applying each model's required normalization." So every intervention
-# happens in a shared 224x224 pixel space; ONLY THEN does each backbone apply
-# its own normalization. This guarantees "Every model must receive the same
-# clean and transformed images."
-image_size: 224          # common canvas size (H = W = 224), 3 RGB channels
 
-# -----------------------------------------------------------------------------
-# DATA SPLIT
-# -----------------------------------------------------------------------------
-# "Create a stratified 80/20 training/validation split from the official
-# training partition using seed 6304."
-# ML CONCEPT — STRATIFIED SPLIT: preserve the class proportions in both halves
-# so the validation set is a faithful miniature of the training distribution;
-# otherwise early-stopping decisions would be made on a skewed sample.
+image_size: 224          
+
+
 split:
-  train_frac: 0.8        # 80% used to fit the linear head
-  val_frac: 0.2          # 20% held out for early stopping / model selection
+  train_frac: 0.8        
+  val_frac: 0.2          
 
-# -----------------------------------------------------------------------------
-# LINEAR CLASSIFIER-HEAD TRAINING
-# -----------------------------------------------------------------------------
-# "Train one linear classifier head for each backbone for at most 50 epochs
-# using AdamW with learning rate 1e-3, weight decay 1e-4, and early stopping
-# after five epochs without improved validation accuracy."
-# ML CONCEPT — LINEAR PROBE: we FREEZE the backbone and train only a single
-# linear layer on top. This measures how *linearly separable* the frozen
-# features already are, i.e. it probes the representation itself rather than
-# learning new features. It is the standard way to compare representations.
+
 train:
-  max_epochs: 50         # hard cap required by the spec
-  lr: 0.001              # 1e-3, the AdamW learning rate required by the spec
-  weight_decay: 0.0001   # 1e-4, L2-style regularization required by the spec
-  batch_size: 128        # feature vectors are small, so a large batch is fine
-  early_stop_patience: 5 # stop after 5 epochs w/o val-accuracy improvement
-  optimizer: adamw       # AdamW = Adam with *decoupled* weight decay
+  max_epochs: 50         
+  lr: 0.001              
+  weight_decay: 0.0001   
+  batch_size: 128        
+  early_stop_patience: 5 
+  optimizer: adamw       
 
-# -----------------------------------------------------------------------------
-# EVALUATION SUBSET
-# -----------------------------------------------------------------------------
-# "Select a class-balanced subset of 500 official test images using seed 6304.
-# If a class has insufficient examples, use all available examples and document
-# the imbalance." 500 / 10 = 50 images per class for STL-10.
+
 eval_subset:
-  size: 500              # total images in the evaluation subset
-  balanced: true         # aim for equal images per class (class-balanced)
+  size: 500              
+  balanced: true         
 
-# -----------------------------------------------------------------------------
-# CUE-CONFLICT (SHAPE vs TEXTURE) GENERATION
-# -----------------------------------------------------------------------------
-# "Produce at least 200 valid conflicts, balanced across class pairs and
-# directions... select at least five unordered class pairs, and generate both
-# directions when feasible." We over-generate to survive the rejection rule.
+
 cue_conflict:
-  num_pairs: 6           # >= 5 unordered class pairs required
-  target_valid: 220      # aim slightly above the 200 minimum for safety margin
-  style_strength: 1.0    # AdaIN alpha in [0,1]; 1.0 = full style transfer.
-                         # This is one of OUR experimental-design choices
-                         # (the spec lists "style strength" as ours to set).
-  n_saved_samples: 40    # how many cue-conflict images to save as individual
-                         # labeled PNGs for the required visual sanity check
-                         # (a montage of the first 40 is always saved too).
-                         # Files land in results/cue_conflict_samples/.
-  # VISUAL REJECTION RULE (must be defined BEFORE model evaluation, and must
-  # NOT use model predictions — see spec: "define a visual rejection rule
-  # before model evaluation and record the accepted and rejected counts. Do
-  # not use model predictions to decide which images to retain.")
-  # We reject a stylization if it is degenerate: near-constant output (style
-  # washed everything out) OR it barely changed from the content image (style
-  # failed to apply). Thresholds are content-independent image statistics.
+  num_pairs: 6           
+  target_valid: 220      
+  style_strength: 1.0    
+                         
+                         
+  n_saved_samples: 40    
+        
   reject:
-    min_std: 0.03        # reject if per-image std < this (collapsed/flat image)
-    min_change: 0.02     # reject if mean|stylized-content| < this (no stylization)
+    min_std: 0.03        
+    min_change: 0.02     
 
-# -----------------------------------------------------------------------------
-# TRANSLATION EXPERIMENT
-# -----------------------------------------------------------------------------
-# "Translate each image by 0, 8, 16, and 32 pixels in the four cardinal
-# directions using reflection padding followed by a shifted crop, and average
-# the results across directions."
+
 translation:
-  shifts: [0, 8, 16, 32]                 # displacement magnitudes in pixels
-  directions: [up, down, left, right]    # the four cardinal directions
+  shifts: [0, 8, 16, 32]                 
+  directions: [up, down, left, right]    
 
-# -----------------------------------------------------------------------------
-# PATCH-SHUFFLE EXPERIMENT
-# -----------------------------------------------------------------------------
-# "Divide each image into a 4x4 pixel-space grid and generate one non-identity
-# patch permutation per image using seed 6304."
+
 patch_shuffle:
-  grid: 4                # 4x4 = 16 patches per image
+  grid: 4                
 
-# -----------------------------------------------------------------------------
-# ADDITIONAL COLOR INTERVENTION (our choice)
-# -----------------------------------------------------------------------------
-# Grayscale is the REQUIRED common color intervention. The spec then says
-# "choose one additional transformation: fixed hue rotation, palette transfer,
-# or class-swapped color statistics." We choose a FIXED HUE ROTATION because
-# it is deterministic, cleanly "changes color while preserving object
-# geometry", and has an unambiguous single parameter to report.
+
 color:
-  additional: hue_rotation   # one of: hue_rotation | palette_transfer | class_swap
-  hue_degrees: 90            # rotate hue by a fixed 90 degrees on the color wheel
+  additional: hue_rotation   
+  hue_degrees: 90            
 
-# -----------------------------------------------------------------------------
-# REPRESENTATION VISUALIZATION (our choice)
-# -----------------------------------------------------------------------------
-# The spec lets us choose t-SNE or UMAP and its settings. We default to t-SNE
-# (always available via scikit-learn, no extra dependency) but the code will
-# transparently fall back / can be switched to UMAP if installed.
+
 visualization:
-  method: tsne           # one of: tsne | umap
-  perplexity: 30         # t-SNE neighborhood size; standard default
-  n_iter: 1000           # t-SNE optimization iterations
-  umap_n_neighbors: 15   # only used if method == umap
-  umap_min_dist: 0.1     # only used if method == umap
+  method: tsne           
+  perplexity: 30         
+  n_iter: 1000           
+  umap_n_neighbors: 15   
+  umap_min_dist: 0.1     
 
-# -----------------------------------------------------------------------------
-# CLIP ZERO-SHOT
-# -----------------------------------------------------------------------------
-# "Also evaluate CLIP zero-shot using the fixed prompt 'a photo of a {class}.'"
+
 clip:
-  model_name: ViT-B-32   # OpenCLIP architecture required by the spec
-  pretrained: openai     # pretrained='openai' required by the spec
-  prompt_template: "a photo of a {}."   # the exact fixed prompt
+  model_name: ViT-B-32   
+  pretrained: openai     
+  prompt_template: "a photo of a {}."   
 
-# -----------------------------------------------------------------------------
-# OUTPUT LOCATIONS
-# -----------------------------------------------------------------------------
+
 paths:
-  results_dir: ./results     # all CSVs, plots, and JSON summaries land here
-  cache_dir: ./cache         # cached tensors (features, transformed images)
+  results_dir: ./results     
+  cache_dir: ./cache         

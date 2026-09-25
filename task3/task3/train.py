@@ -1,20 +1,4 @@
-# =============================================================================
-# task3/train.py
-# -----------------------------------------------------------------------------
-# THE COMMON TRAINING LOOP for Task 3, shared by ERM, DAN-DG, and SAM. It:
-#   * builds ResNet-18 backbone + 7-class head (identical to Task 2);
-#   * assembles DOMAIN-BALANCED SOURCE batches (8 per source, NO target — Sketch
-#     is unavailable in DG);
-#   * keeps per-domain features so DAN-DG can compute pairwise source MMD;
-#   * enforces the frozen-BatchNorm policy after every model.train();
-#   * runs the SAM two-pass (ascent/descent) update when the method requests it;
-#   * selects the checkpoint by MEAN SOURCE-VALIDATION macro-F1 (never Sketch);
-#   * early-stops after 5 epochs without improvement;
-#   * for ERM, can LOAD Task 2's Source-only checkpoint instead of retraining.
-#
-# LINKS: shared/{utils,pacs,pacs_protocol}, models/*, methods/*,
-# selection/source_validation.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")  # Apple-Silicon safety net
@@ -44,7 +28,6 @@ from torch.utils.data import DataLoader
 
 
 def build_method(cfg):
-    """Instantiate the method named in the config (uniform interface)."""
     name = cfg["method"]["name"]
     if name == "erm":
         return ERM(cfg)
@@ -56,11 +39,7 @@ def build_method(cfg):
 
 
 def make_source_iters(cfg, train_sets):
-    """One cycling loader per source domain, each yielding `per_source_batch` imgs.
-
-    Unlike Task 2 there is NO target loader (Sketch is unavailable). Each update
-    pulls 8 images from every source, giving a domain-balanced batch of 24.
-    """
+   
     per = cfg["train"]["per_source_batch"]             # 8
     iters = {}
     for domain, ds in train_sets.items():
@@ -76,11 +55,7 @@ def make_val_loaders(cfg, val_sets):
 
 
 def _pull_balanced_batch(source_iters, cfg, device):
-    """Pull one domain-balanced batch: dict {domain: (imgs, labels)} on device.
 
-    Separated from the forward pass so SAM can run TWO forward passes on the
-    SAME images (its ascent and descent passes must use identical inputs).
-    """
     batch = {}
     for domain in cfg["dataset"]["source_domains"]:
         imgs, labels = source_iters[domain].next()
@@ -89,11 +64,7 @@ def _pull_balanced_batch(source_iters, cfg, device):
 
 
 def _forward_batch(backbone, head, batch):
-    """Forward a pulled batch: return per-domain features, pooled logits, labels.
-
-    feats_by_domain[domain] = (per_source, 512) — needed by DAN-DG's pairwise MMD.
-    logits (24,7) and labels (24,) are the pooled source predictions/targets.
-    """
+    
     feats_by_domain, all_logits, all_labels = {}, [], []
     for domain, (imgs, labels) in batch.items():
         feats = backbone(imgs)                          # (8, 512)
@@ -104,11 +75,7 @@ def _forward_batch(backbone, head, batch):
 
 
 def _load_erm_checkpoint(cfg, backbone, head, device):
-    """If a Task 2 ERM checkpoint path is provided, load it into backbone+head.
-
-    Spec: Task 3's ERM should REUSE Task 2's Source-only checkpoint rather than
-    retrain. Returns True if a checkpoint was loaded, else False.
-    """
+   
     path = cfg["paths"].get("task2_erm_checkpoint")
     if path and os.path.exists(path):
         state = torch.load(path, map_location=device, weights_only=False)
@@ -120,7 +87,6 @@ def _load_erm_checkpoint(cfg, backbone, head, device):
 
 
 def train_one_config(cfg, run_name=None, save_checkpoint=True):
-    """Train one method end-to-end; return (best_state, history, ckpt_path)."""
     set_seed(cfg["seed"])
     device = get_device()
     num_classes = cfg["dataset"]["num_classes"]
@@ -129,7 +95,6 @@ def train_one_config(cfg, run_name=None, save_checkpoint=True):
     ckpt_dir = ensure_dir(cfg["paths"]["checkpoints_dir"])
     print(f"[info] method={run_name} device={device}")
 
-    # ---- DATA (sources only; Sketch never loaded here) ----
     splits = build_or_load_splits(cfg)
     train_sets, val_sets = make_source_datasets(cfg, splits, train=True)
     _, val_sets_eval = make_source_datasets(cfg, splits, train=False)  # clean val
@@ -137,14 +102,11 @@ def train_one_config(cfg, run_name=None, save_checkpoint=True):
     val_loaders = make_val_loaders(cfg, val_sets_eval)
     n_steps = steps_per_epoch(cfg, train_sets)
 
-    # ---- MODEL ----
     backbone = ResNet18Backbone().to(device)
     head = ClassifierHead(backbone.feature_dim, num_classes).to(device)
     method = build_method(cfg).to(device)
 
-    # ERM special case: optionally LOAD Task 2's checkpoint and skip training.
     if cfg["method"]["name"] == "erm" and _load_erm_checkpoint(cfg, backbone, head, device):
-        # Evaluate once for the record, save under this run name, and return.
         backbone.eval(); head.eval()
         val = evaluate_source_val(backbone, head, val_loaders, device, num_classes)
         best_state = {"backbone": copy.deepcopy(backbone.state_dict()),
@@ -163,7 +125,6 @@ def train_one_config(cfg, run_name=None, save_checkpoint=True):
             return best_state, history, ckpt_path
         return best_state, history, None
 
-    # Optimizer: SAM wraps AdamW; other methods use AdamW directly.
     params = list(backbone.parameters()) + list(head.parameters())
     for m in method.extra_modules():
         params += list(m.parameters())
@@ -178,10 +139,7 @@ def train_one_config(cfg, run_name=None, save_checkpoint=True):
     history = {"epoch": [], "mean_source_val_macro_f1": [],
                "worst_source_val_macro_f1": [], "step_logs": []}
 
-    # MMD warm-up bookkeeping (DAN-DG only). If the method defines
-    # `set_align_scale` and a positive warmup_steps, we linearly ramp the MMD
-    # multiplier from 0 to 1 over the first `warmup_steps` updates so the
-    # classifier can learn before alignment pressure engages. No-op otherwise.
+    
     global_step = 0
     warmup_steps = int(getattr(method, "warmup_steps", 0) or 0)
     has_warmup = hasattr(method, "set_align_scale") and warmup_steps > 0
@@ -192,29 +150,24 @@ def train_one_config(cfg, run_name=None, save_checkpoint=True):
 
         for _ in range(n_steps):
             if has_warmup:
-                # linear 0->1 over warmup_steps, then clamp at 1
                 method.set_align_scale(min(1.0, global_step / max(1, warmup_steps)))
             global_step += 1
-            # Pull ONE domain-balanced batch of source images (shared by both
-            # SAM passes so ascent and descent see identical inputs).
+            
             batch = _pull_balanced_batch(source_iters, cfg, device)
 
             if method.uses_sam:
-                # ---- SAM: two forward/backward passes on the SAME batch ----
-                # PASS 1 (ascent): grad at theta, then perturb to theta+eps.
+               
                 feats, logits, labels = _forward_batch(backbone, head, batch)
                 loss1, logs = method.compute_loss(feats, logits, labels)
                 loss1.backward()
                 optimizer.first_step(zero_grad=True)    # move weights to theta+eps
                 backbone.set_bn_eval()                  # keep BN frozen on pass 2
-                # PASS 2 (descent): recompute loss at theta+eps on the SAME images,
-                # backprop, then restore theta and take the AdamW step.
+                
                 feats2, logits2, labels2 = _forward_batch(backbone, head, batch)
                 loss2, _ = method.compute_loss(feats2, logits2, labels2)
                 loss2.backward()
                 optimizer.second_step(zero_grad=True)   # restore theta, AdamW step
             else:
-                # ---- ERM / DAN-DG: single pass ----
                 feats, logits, labels = _forward_batch(backbone, head, batch)
                 loss, logs = method.compute_loss(feats, logits, labels)
                 optimizer.zero_grad()
@@ -223,7 +176,6 @@ def train_one_config(cfg, run_name=None, save_checkpoint=True):
             logs["epoch"] = epoch
             history["step_logs"].append(logs)
 
-        # ---- checkpoint selection: MEAN SOURCE-VAL MACRO-F1 (no Sketch) ----
         backbone.eval(); head.eval()
         val = evaluate_source_val(backbone, head, val_loaders, device, num_classes)
         mean_f1 = val["mean_macro_f1"]

@@ -1,33 +1,14 @@
-# =============================================================================
-# dan.yaml  — DAN: MMD-based marginal alignment (Step 2)
-# -----------------------------------------------------------------------------
-# ML CONCEPT — DAN (Deep Adaptation Networks, Long et al. 2015):
-#   Adds a discrepancy penalty that pushes the SOURCE and TARGET feature
-#   distributions together, measured by Maximum Mean Discrepancy (MMD). The
-#   total loss is  L = L_cls + lambda_MMD * MMD^2(source_feat, target_feat).
-#   Crucially, MMD does not know which target example is which class — it aligns
-#   the OVERALL (marginal) distributions P(F(X)). This tests whether reducing a
-#   purely statistical source-target gap helps transfer.
-# =============================================================================
+
 inherit: base.yaml
 
 method:
   name: dan
-  # Spec: "Use lambda_MMD = 1 for the main comparison."
+
   lambda_mmd: 1.0
-  # Spec: "a sum of three RBF kernels whose bandwidths are 0.5, 1, and 2 times
-  # the median pairwise squared feature distance in the current combined batch."
-  # ML CONCEPT — MULTI-KERNEL MMD: using several RBF bandwidths makes MMD
-  # sensitive to differences at multiple scales, rather than betting on one
-  # bandwidth. The 'median heuristic' sets a data-driven base bandwidth.
+  
   rbf_bandwidth_multipliers: [0.5, 1.0, 2.0]
 
-# -----------------------------------------------------------------------------
-# CONTROLLED DESIGN STUDY (Step 6) — one of two options.
-# We choose the DAN option: vary lambda_MMD over {0.1, 1, 10}.
-# Spec: "vary lambda_MMD in {0.1, 1, 10} for DAN ... Keep every other setting
-# fixed." Setting this list turns on the sweep in the controlled-study script.
-# -----------------------------------------------------------------------------
+
 controlled_study:
   enabled: true
   sweep_param: lambda_mmd

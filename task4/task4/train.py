@@ -1,21 +1,4 @@
-# =============================================================================
-# task4/train.py
-# -----------------------------------------------------------------------------
-# THE COMMON TRAINING LOOP for Task 4. Trains any of:
-#   * Vanilla  (cross-entropy, base aug)
-#   * GCSC     (cross-entropy, + RandAugment)
-#   * PROSER   (init from Vanilla; classifier + data placeholder losses, 50 ep)
-#   * RPL      (optional; reciprocal-point loss + open-space reg)
-# It builds the CIFAR ResNet-18, the 90/10 split, an SGD + cosine schedule, and
-# selects the checkpoint by CIFAR-10 VALIDATION ACCURACY (spec). Unknowns are
-# NEVER loaded here.
-#
-# ML CONCEPT — CHECKPOINT SELECTION BY KNOWN VALIDATION ACCURACY:
-#   Everything about the model (weights, when to stop) is chosen using known data
-#   only. This is the firewall that keeps CIFAR-100 evaluation-only.
-#
-# LINKS: data/{cifar10,make_splits}, models/resnet_cifar, methods/*.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -48,19 +31,15 @@ def build_method(cfg):
 
 @torch.no_grad()
 def _val_accuracy(model, val_loader, device, method_name):
-    """Closed-set validation accuracy (known-class), used for checkpoint selection.
-
-    For PROSER/RPL the 'known logits' come from method-specific accessors; for
-    Vanilla/GCSC the model returns logits directly.
-    """
+    
     model.eval()
     correct = total = 0
     for imgs, labels in val_loader:
         imgs = imgs.to(device); labels = labels.to(device)
         if method_name == "proser":
-            logits, _ = model(imgs)                      # known logits only
+            logits, _ = model(imgs)                      
         elif method_name == "rpl":
-            _, logits = model.distances(imgs)           # distance-logits act as scores
+            _, logits = model.distances(imgs)           
         else:
             logits = model(imgs)
         correct += (logits.argmax(1) == labels).sum().item()
@@ -69,12 +48,10 @@ def _val_accuracy(model, val_loader, device, method_name):
 
 
 def _make_scheduler(optimizer, epochs):
-    """Cosine-annealing LR schedule over all epochs (spec: cosine decay)."""
     return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
 
 def train_one(cfg, run_name=None, init_checkpoint=None):
-    """Train one method end-to-end; return (best_state, history, ckpt_path)."""
     set_seed(cfg["seed"])
     device = get_device()
     num_classes = cfg["known"]["num_classes"]
@@ -84,7 +61,6 @@ def train_one(cfg, run_name=None, init_checkpoint=None):
     ckpt_dir = ensure_dir(cfg["paths"]["checkpoints_dir"])
     print(f"[info] method={run_name} device={device}")
 
-    # ---- DATA: 90/10 split; train uses (Rand)aug, val is clean ----
     use_ra = getattr(method, "uses_randaugment", False)
     train_aug = load_cifar10_train(cfg, train_transform=True, randaugment=use_ra)
     train_clean = load_cifar10_train(cfg, train_transform=False)
@@ -96,11 +72,9 @@ def train_one(cfg, run_name=None, init_checkpoint=None):
     val_loader = DataLoader(val_set, batch_size=256, shuffle=False,
                             num_workers=cfg["train"]["num_workers"])
 
-    # ---- MODEL ----
     backbone = CifarResNet18(num_classes=num_classes).to(device)
     mname = cfg["method"]["name"]
     if mname == "proser":
-        # PROSER wraps the backbone with dummy heads and inits from Vanilla.
         model = ProserModel(backbone, num_classes, cfg["method"]["num_dummy"]).to(device)
         if init_checkpoint and os.path.exists(init_checkpoint):
             state = torch.load(init_checkpoint, map_location=device, weights_only=False)
@@ -113,7 +87,6 @@ def train_one(cfg, run_name=None, init_checkpoint=None):
     else:
         model = backbone
 
-    # ---- OPTIMIZER + SCHEDULE ----
     if mname == "proser":
         ft = cfg["method"]["finetune"]
         epochs = ft["epochs"]
@@ -126,7 +99,6 @@ def train_one(cfg, run_name=None, init_checkpoint=None):
                                     weight_decay=cfg["train"]["weight_decay"])
     scheduler = _make_scheduler(optimizer, epochs)
 
-    # ---- TRAIN LOOP ----
     best_acc, best_state = -1.0, None
     history = {"epoch": [], "val_acc": [], "step_logs": []}
     for epoch in range(epochs):

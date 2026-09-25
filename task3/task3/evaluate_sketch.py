@@ -1,21 +1,4 @@
-# =============================================================================
-# task3/evaluate_sketch.py
-# -----------------------------------------------------------------------------
-# THE FINAL EVALUATION STAGE — the ONLY place Sketch (the unseen target) is
-# loaded (spec: "Load Sketch only in the final Task 3 evaluation script after all
-# Task 3 decisions have been fixed."). It produces all Required Evidence:
-#   * table: ERM / DAN-DG / SAM on each source-val domain, mean-source,
-#     worst-source, and Sketch accuracy + macro-F1, plus Sketch accuracy change
-#     vs ERM;
-#   * source-domain separability (3-way) and the sharpness proxy for all three;
-#   * per-class Sketch accuracy changes vs ERM and dominant confusions.
-#
-# CRITICAL ORDERING RULE (spec): everything here runs after training + selection
-# are frozen. Nothing computed here feeds back into any training decision.
-#
-# LINKS: loads checkpoints from train.py; uses evaluation/{domain_metrics,
-# source_domain_separability, sharpness} and selection/source_validation.
-# =============================================================================
+
 
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -60,13 +43,11 @@ def evaluate_all(cfg, method_names=("erm", "dan_dg", "sam")):
     results_dir = ensure_dir(cfg["paths"]["results_dir"])
     ckpt_dir = cfg["paths"]["checkpoints_dir"]
 
-    # ---- source-val loaders (clean) + the fixed source-val subsets for sharpness ----
     splits = build_or_load_splits(cfg)
     _, val_sets = make_source_datasets(cfg, splits, train=False)
     val_loaders = {d: DataLoader(ds, batch_size=64, shuffle=False, num_workers=2)
                    for d, ds in val_sets.items()}
 
-    # ---- SKETCH loaded HERE for the first time (final evaluation only) ----
     target_set = make_target_dataset(cfg, train=False)
     target_loader = DataLoader(target_set, batch_size=64, shuffle=False, num_workers=2)
 
@@ -78,12 +59,9 @@ def evaluate_all(cfg, method_names=("erm", "dan_dg", "sam")):
             continue
         backbone, head = _load_model(ckpt_path, num_classes, device)
 
-        # source-val metrics (mean + worst) — no Sketch involved
         val = evaluate_source_val(backbone, head, val_loaders, device, num_classes)
-        # Sketch metrics (target labels used only now)
         t = evaluate_target(backbone, head, target_loader, device, num_classes)
         target_preds[name] = (t["preds"], t["labels"])
-        # source-domain separability (3-way) and sharpness proxy
         sep = compute_source_domain_separability(backbone, val_loaders, cfg, device)
         sharp = compute_sharpness_proxy(backbone, head, val_sets, cfg, device)
 
@@ -103,13 +81,11 @@ def evaluate_all(cfg, method_names=("erm", "dan_dg", "sam")):
               f"sketch_top1={t['top1']:.3f} sep={sep['source_domain_separability']:.3f} "
               f"delta_sharp={sharp['delta_sharp']:.4f}")
 
-    # ---- Sketch accuracy CHANGE vs ERM ----
     if "erm" in summary:
         base = summary["erm"]["sketch_top1"]
         for name in summary:
             summary[name]["sketch_top1_change_vs_erm"] = summary[name]["sketch_top1"] - base
 
-    # ---- per-class Sketch analysis vs ERM ----
     class_report = {}
     if "erm" in target_preds:
         base_preds, base_labels = target_preds["erm"]

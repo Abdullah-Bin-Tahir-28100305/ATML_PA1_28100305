@@ -1,41 +1,18 @@
-# =============================================================================
-# proser.yaml  — PROSER: classifier + data placeholders (Step 4)
-# -----------------------------------------------------------------------------
-# ML CONCEPT — PROSER (Zhou et al. 2021):
-#   Prepare a closed-set classifier to REJECT unknowns WITHOUT ever seeing real
-#   unknowns, by learning two kinds of PLACEHOLDERS:
-#     * CLASSIFIER placeholders: append K extra "dummy" output units. For a known
-#       example, the true class should stay largest; but with the true class
-#       EXCLUDED, a dummy should become the strongest remaining response. This
-#       teaches the dummies to occupy the space "just outside" each known class.
-#     * DATA placeholders: since we have no real unknowns, synthesize proxy
-#       unknowns via MANIFOLD MIXUP (mix two different-class features after
-#       layer2, before layer3) and train those mixed points toward the dummies.
-#   Together these tighten known-class boundaries and give an explicit reject
-#   signal (the strongest dummy response).
-#
-# Spec: init from the selected Vanilla checkpoint; append FIVE dummy classifiers;
-# fine-tune 50 epochs SGD lr 1e-3, momentum 0.9, wd 5e-4, cosine, batch 128,
-# seed 6304. beta=1 (classifier-placeholder loss), gamma=0.1 (data-placeholder
-# loss), manifold mixup lambda ~ Beta(2,2). Split each mini-batch in half:
-# first half -> classifier placeholders, second half -> data placeholders.
-# =============================================================================
+
 inherit: base.yaml
 
 method:
   name: proser
-  num_dummy: 5             # number of appended dummy classifiers
-  beta: 1.0               # weight on the classifier-placeholder loss
-  gamma: 0.1              # weight on the data-placeholder (manifold-mixup) loss
-  mixup_alpha: 2.0        # Beta(2,2) -> alpha=beta=2 for lambda sampling
-  # PROSER fine-tuning schedule (overrides base train.* where different).
+  num_dummy: 5             
+  beta: 1.0               
+  gamma: 0.1              
+  mixup_alpha: 2.0        
   finetune:
-    lr: 0.001             # 1e-3
+    lr: 0.001             
     epochs: 50
     momentum: 0.9
     weight_decay: 0.0005
     scheduler: cosine
     batch_size: 128
 
-# init_from: which trained checkpoint to fine-tune from (the Vanilla one).
 init_from: vanilla

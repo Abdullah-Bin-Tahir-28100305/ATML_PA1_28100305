@@ -1,16 +1,5 @@
-# =============================================================================
-# vanilla.yaml  — Vanilla closed-set baseline (Step 1)
-# -----------------------------------------------------------------------------
-# ML CONCEPT — VANILLA CLOSED-SET CLASSIFIER:
-#   An ordinary 10-class ResNet-18 trained with cross-entropy on CIFAR-10, using
-#   only the standard crop+flip augmentation. It is FROZEN after selection and
-#   its logits/features feed the four post-hoc novelty scores (MSP/MLS/Energy/
-#   Mahalanobis). It is also the initialization for PROSER.
-#   Vaze et al. (2022): a good closed-set classifier already gives a strong OSR
-#   signal via Maximum Logit Score, so this baseline matters a lot.
-# =============================================================================
+
 inherit: base.yaml
 
 method:
   name: vanilla
-  # No extra augmentation beyond the base crop+flip; no architectural change.

@@ -1,30 +1,4 @@
-# =============================================================================
-# task2/evaluation/domain_separability.py
-# -----------------------------------------------------------------------------
-# PURPOSE: measure how much RESIDUAL DOMAIN INFORMATION remains in a model's
-# features after adaptation, by trying to classify a feature as source-vs-target
-# with a simple logistic regression.
-#
-# ML CONCEPT — DOMAIN SEPARABILITY:
-#   Freeze the backbone, extract features for equal numbers of source-validation
-#   and target examples, then train a balanced logistic-regression classifier
-#   (C=1) on a 70/30 split to predict domain (source=0/target=1). Its HELD-OUT
-#   accuracy is the 'domain separability' score:
-#     * ~50% (chance) => features carry little domain info (well aligned);
-#     * high          => source and target are still easy to tell apart.
-#   Spec 'What to watch for': lower separability means domain info is harder to
-#   recover, NOT automatically that class info is preserved — so we compare this
-#   score WITH target recognition rather than assuming lower is better.
-#
-# WHY LOGISTIC REGRESSION (not the adversarial discriminator):
-#   It is a fixed, simple, reproducible probe evaluated AFTER training. It gives
-#   an objective, method-independent read of residual domain information, whereas
-#   the training-time discriminator is entangled with the adversarial game.
-#
-# LINKS:
-#   - Called by evaluate_final.py once every checkpoint is fixed.
-#   - Uses seed 6304 and a 70/30 split, per spec.
-# =============================================================================
+
 
 import numpy as np
 import torch
@@ -34,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 @torch.no_grad()
 def _extract_features(backbone, loader, device, max_features):
-    """Collect up to `max_features` feature vectors from a loader (no labels)."""
+
     feats = []
     count = 0
     for imgs, _ in loader:
@@ -50,16 +24,7 @@ def _extract_features(backbone, loader, device, max_features):
 
 def compute_domain_separability(backbone, source_val_loader, target_loader,
                                 cfg, device):
-    """Train a source-vs-target logistic regression on frozen features.
-
-    Returns a dict with the held-out separability accuracy and the group sizes.
-    Steps:
-      1) Extract EQUAL numbers of source-val and target features (spec: "equal
-         numbers of source-validation and target features").
-      2) Label source=0, target=1; standardize is unnecessary for LogReg here.
-      3) 70/30 stratified split (seed 6304), fit balanced LogReg with C=1.
-      4) Report held-out accuracy = domain separability score.
-    """
+    
     max_per = cfg["domain_separability"]["max_features_per_group"]
 
     # 1) equal-sized feature groups.
