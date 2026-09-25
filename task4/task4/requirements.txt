@@ -1,0 +1,10 @@
+# =============================================================================
+# requirements.txt — Python dependencies for Task 4 (Open-Set Recognition).
+# Install with:  pip install -r task4/requirements.txt
+# =============================================================================
+torch>=2.0            # deep-learning framework (autograd, training, PROSER/RPL)
+torchvision>=0.15     # CIFAR-10/100 datasets (auto-download), ResNet-18, RandAugment
+scikit-learn>=1.2     # roc_auc_score for AUROC
+numpy>=1.23           # array math + the post-hoc scores + Mahalanobis fit
+matplotlib>=3.6       # score-distribution / ROC figure
+PyYAML>=6.0           # parse YAML configs (base + per-method with inherit)

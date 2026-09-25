@@ -1,0 +1,6 @@
+data_cache/
+*.pt
+*.npz
+*.zip
+__pycache__/
+.DS_Store

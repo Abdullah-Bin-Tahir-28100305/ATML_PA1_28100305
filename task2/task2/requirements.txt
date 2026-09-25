@@ -1,0 +1,10 @@
+# =============================================================================
+# requirements.txt — Python dependencies for Task 2 (and shared with Task 3).
+# Install with:  pip install -r task2/requirements.txt
+# =============================================================================
+torch>=2.0            # deep-learning framework (tensors, autograd, GRL via autograd.Function)
+torchvision>=0.15     # pretrained ResNet-18 + ImageFolder dataset loader
+scikit-learn>=1.2     # macro-F1, and the domain-separability logistic regression
+numpy>=1.23           # array math throughout
+matplotlib>=3.6       # loss curves + controlled-study plot
+PyYAML>=6.0           # parse the YAML configs (base + per-method, with inherit)

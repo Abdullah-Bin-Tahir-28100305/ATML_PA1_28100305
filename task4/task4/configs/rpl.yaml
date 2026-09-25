@@ -1,0 +1,29 @@
+# =============================================================================
+# rpl.yaml  — Reciprocal Point Learning (Step 5, OPTIONAL extension)
+# -----------------------------------------------------------------------------
+# ML CONCEPT — RPL (Chen et al. 2020):
+#   Most classifiers learn what each class IS. RPL learns what each class is NOT,
+#   via a learned RECIPROCAL POINT per class. A feature of class k is pushed AWAY
+#   from class k's reciprocal point, so greater distance = stronger evidence for
+#   class k. Test inputs that are NOT far enough from any reciprocal point are
+#   rejected as unknown. An OPEN-SPACE regularization term keeps the feature
+#   space bounded so unknowns cannot hide arbitrarily far away.
+#
+# Trained on CIFAR-10 only (no CIFAR-100 influence). Evaluated with the same
+# near/far split, AUROC, and validation-calibrated rejection as the required
+# methods, and added as an extra row in the comparison.
+#
+# This is OPTIONAL: run it only if you want the RPL row. The default pipeline
+# (run_task4.py) does NOT run RPL unless you pass --include_rpl.
+# =============================================================================
+inherit: base.yaml
+
+method:
+  name: rpl
+  # Number of reciprocal points per class (1 is the standard, simplest choice).
+  num_reciprocal_per_class: 1
+  # Weight on the open-space regularization term (keeps features bounded).
+  lambda_open: 0.1
+  # Margin/radius R for the open-space term (learned or fixed; we start fixed).
+  open_space_radius: 1.0
+  # RPL uses the same base SGD recipe (lr 0.1, 100 epochs, cosine) as Vanilla.

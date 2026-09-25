@@ -1,0 +1,10 @@
+# =============================================================================
+# requirements.txt — Python dependencies for Task 3 (shares the Task 2 stack).
+# Install with:  pip install -r task3/requirements.txt
+# =============================================================================
+torch>=2.0            # deep-learning framework (autograd powers SAM + sharpness proxy)
+torchvision>=0.15     # pretrained ResNet-18 + ImageFolder loader
+scikit-learn>=1.2     # macro-F1 + the 3-way source-domain-separability logistic regression
+numpy>=1.23           # array math throughout
+matplotlib>=3.6       # training curves + controlled-study plot
+PyYAML>=6.0           # parse YAML configs (base + per-method with inherit)

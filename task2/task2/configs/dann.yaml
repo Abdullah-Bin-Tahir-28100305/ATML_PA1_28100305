@@ -1,0 +1,75 @@
+# =============================================================================
+# dann.yaml  — DANN: adversarial marginal alignment (Step 3)
+# -----------------------------------------------------------------------------
+# ML CONCEPT — DANN (Domain-Adversarial Training, Ganin et al. 2016):
+#   Instead of an explicit distance like MMD, DANN plays a MIN-MAX game. A binary
+#   domain DISCRIMINATOR tries to tell source features from target features; the
+#   feature extractor tries to FOOL it. This is implemented with a Gradient
+#   Reversal Layer (GRL): in the forward pass it is the identity, but in the
+#   backward pass it MULTIPLIES the gradient by -alpha, so minimizing the
+#   discriminator's loss w.r.t. the backbone actually MAXIMIZes domain confusion.
+#   Result: features become domain-invariant (marginal alignment), like DAN but
+#   learned adversarially rather than measured by a fixed kernel.
+# =============================================================================
+inherit: base.yaml
+
+# -----------------------------------------------------------------------------
+# DANN STABILISATION — "Route 2": the STANDARD stable DANN training recipe.
+# -----------------------------------------------------------------------------
+# WHY THIS APPROACH (and why it keeps the assignment's settings):
+#   DANN ran the discriminator on the RAW, unbounded 512-d feature and collapsed:
+#   it learned well for one epoch, then as GRL alpha rose the discriminator (on
+#   the raw feature) overpowered the feature extractor, features collapsed, and
+#   source F1 fell below chance. CDAN — same GRL, same schedule — stayed stable
+#   because its discriminator input was normalised. The one variable that differs
+#   between collapsing-DANN and stable-CDAN is therefore the discriminator input.
+#
+#   Route 2 fixes exactly that, using two techniques that are STANDARD in
+#   DANN-on-PACS implementations and that DO NOT change the assignment's
+#   prescribed hyperparameters:
+#     1. L2-NORMALISE the feature into the DANN discriminator (methods/dann.py).
+#        This is an implementation detail of the discriminator input, not a
+#        hyperparameter the assignment fixes.
+#     2. A SEPARATE, lower DISCRIMINATOR learning rate (`disc_lr`, applied via a
+#        param-group split in train.py) so the discriminator cannot overpower the
+#        feature extractor. The assignment specifies one AdamW lr for training the
+#        MODEL; it never assigns the auxiliary discriminator its own rate, so this
+#        is an open implementation choice, not a deviation.
+#
+#   Crucially, the assignment's DANN settings are PRESERVED: the backbone + head
+#   keep lr 1e-4 (inherited from base.yaml — no train.lr override here), and the
+#   GRL schedule keeps alpha_max = 1.0, gamma = 10. So the alignment strength the
+#   spec prescribes is untouched; only the discriminator's optimisation is tamed.
+#   A light grad-clip is retained purely as a cheap safety net (base.yaml=1.0).
+method:
+  name: dann
+  # Discriminator architecture (spec): "256-unit hidden layer, ReLU, dropout of
+  # 0.5, and a two-class output layer" on the 512-d feature.
+  disc_hidden: 256
+  disc_dropout: 0.5
+  # Loss weight on the domain-classification term (spec: "unit weight").
+  domain_loss_weight: 1.0
+  # GRL schedule (spec, UNCHANGED): alpha(p) = 2/(1+exp(-10 p)) - 1, p in [0,1].
+  grl_gamma: 10.0
+  grl_max_alpha: 1.0               # spec value restored (Route 2 keeps full alignment)
+  # L2-normalise the 512-d feature before the discriminator (stability; not a
+  # spec hyperparameter). Set false to reproduce the raw-feature (collapsing) run.
+  normalize_disc_input: true
+  # Separate discriminator learning rate (two-timescale adversarial training).
+  # Lower than the model lr (1e-4) so the discriminator cannot overpower F.
+  # Not a spec hyperparameter — the spec assigns no LR to the discriminator.
+  disc_lr: 0.00001
+
+# -----------------------------------------------------------------------------
+# CONTROLLED DESIGN STUDY (Step 6) — the DANN option (alternative to DAN's).
+# Spec: "vary the maximum gradient-reversal strength in DANN over {0.25,0.5,1}
+# while retaining the same schedule shape."
+# NOTE: The assignment asks you to choose ONE of the two studies. We enable the
+# DAN lambda sweep by default (see dan.yaml). This block is provided so you can
+# switch to the DANN study instead by setting enabled: true here and
+# controlled_study.enabled: false in dan.yaml.
+# -----------------------------------------------------------------------------
+controlled_study:
+  enabled: false
+  sweep_param: grl_max_alpha
+  sweep_values: [0.25, 0.5, 1.0]

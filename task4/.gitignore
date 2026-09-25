@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data_cache/
+task4/cache/*
+!task4/cache/.gitkeep
+task4/results/*
+!task4/results/.gitkeep

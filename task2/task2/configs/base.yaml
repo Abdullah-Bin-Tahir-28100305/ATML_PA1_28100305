@@ -1,0 +1,142 @@
+# =============================================================================
+# base.yaml
+# -----------------------------------------------------------------------------
+# SHARED CONFIGURATION for every Task 2 method. The four method configs
+# (source_only.yaml, dan.yaml, dann.yaml, cdan.yaml) inherit from this file and
+# override only what differs, so all common settings live in ONE place.
+#
+# WHY A BASE + PER-METHOD OVERRIDE DESIGN?
+#   The assignment is emphatic that every method must share the SAME pipeline:
+#   "Keep initialization, source sampling, augmentation, optimizer, and training
+#   budget fixed across methods." Putting all of that here, once, is exactly how
+#   we guarantee that. A method file changes only its loss-specific knobs.
+#
+# ML CONCEPT — CONTROLLED COMPARISON:
+#   To attribute a performance difference to the *alignment objective* (DAN vs
+#   DANN vs CDAN), everything else must be held constant. Any uncontrolled
+#   difference (a different LR, a different batch rule) would confound the
+#   comparison. This config is the mechanism that enforces the control.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# REPRODUCIBILITY
+# -----------------------------------------------------------------------------
+# Seed 6304 is mandated for: the 80/20 source splits, every comparison, and the
+# domain-separability logistic-regression split. One seed, reused everywhere.
+seed: 6304
+
+# -----------------------------------------------------------------------------
+# DATASET — PACS
+# -----------------------------------------------------------------------------
+# PACS = 7 object classes across 4 visual DOMAINS (Photo, Art Painting, Cartoon,
+# Sketch). The domains differ in *appearance* (style) but share the class space,
+# which is exactly the setup domain adaptation studies.
+dataset:
+  name: pacs
+  root: ./data_cache/PACS          # where the PACS images live / are downloaded
+  num_classes: 7                   # dog, elephant, giraffe, guitar, horse, house, person
+  # Sketch is the TARGET domain (spec: "use Sketch as the target domain").
+  # The other three are the labeled SOURCE domains.
+  target_domain: sketch
+  source_domains: [photo, art_painting, cartoon]
+
+# -----------------------------------------------------------------------------
+# IMAGE PREPROCESSING
+# -----------------------------------------------------------------------------
+# Spec: "Resize images to 256x256 and use a random 224x224 crop with horizontal
+# flipping during training; use a 224x224 center crop for validation and
+# evaluation. Apply the normalization associated with the pretrained weights."
+image:
+  resize: 256                      # first resize the short side / whole image
+  crop: 224                        # network input size (ResNet-18 expects 224)
+  # ImageNet normalization stats (ResNet-18 was pretrained with these).
+  norm_mean: [0.485, 0.456, 0.406]
+  norm_std:  [0.229, 0.224, 0.225]
+
+# -----------------------------------------------------------------------------
+# SOURCE TRAIN/VAL SPLIT
+# -----------------------------------------------------------------------------
+# Spec: "Within each source domain, create a stratified 80/20 training/
+# validation split using seed 6304." Stratified = preserve class proportions.
+split:
+  train_frac: 0.8
+  val_frac: 0.2
+
+# -----------------------------------------------------------------------------
+# OPTIMIZATION (identical across methods — the controlled part)
+# -----------------------------------------------------------------------------
+# Spec: "Train for at most 30 source epochs using AdamW with learning rate 1e-4
+# and weight decay 1e-4, stopping after five epochs without improvement in mean
+# source-validation macro-F1."
+train:
+  optimizer: adamw
+  lr: 0.0001                       # 1e-4
+  weight_decay: 0.0001             # 1e-4
+  max_epochs: 30
+  early_stop_patience: 5           # epochs w/o mean source-val macro-F1 gain
+  # Spec: "Each adaptation update should contain eight examples from each source
+  # domain and 24 target examples, giving equal total source and target batch
+  # sizes." 3 sources x 8 = 24 source, and 24 target => balanced.
+  per_source_batch: 8              # 8 images from EACH of the 3 source domains
+  target_batch: 24                 # 24 target images per update
+  # "cycle a loader when necessary": shorter loaders restart so every update has
+  # a full, domain-balanced batch.
+  # -----------------------------------------------------------------------------
+  # GRADIENT CLIPPING (numerical-stability guard, applied to EVERY method).
+  # -----------------------------------------------------------------------------
+  # ML CONCEPT — WHY CLIP FOR ADVERSARIAL DA:
+  #   The adversarial min-max game in DANN/CDAN (via the Gradient Reversal Layer)
+  #   is NOT a smooth objective like MMD. When the discriminator and feature
+  #   extractor are briefly mismatched, the reversed gradient can spike, a single
+  #   step overshoots, and training diverges (loss -> 1e5+, features collapse).
+  #   Clipping the GLOBAL gradient norm to a fixed ceiling bounds each step's size
+  #   so one bad batch cannot blow up the weights. It is standard practice for
+  #   adversarial training and does NOT alter the mandated LR/optimizer/schedule.
+  #   We apply it to ALL methods identically to keep the controlled comparison
+  #   honest; on the already-stable Source-only/DAN runs it almost never triggers
+  #   (their gradient norms sit well below the ceiling), so their results are
+  #   unchanged, while DANN/CDAN are kept in a trainable regime.
+  #   Set to 0 or null to disable.
+  grad_clip_norm: 1.0              # clip global grad-norm to this value (0=off)
+
+# -----------------------------------------------------------------------------
+# BATCH-NORMALIZATION POLICY (a subtle but REQUIRED detail)
+# -----------------------------------------------------------------------------
+# Spec: "freeze all BatchNorm running means and variances at their pretrained
+# ImageNet values for every method in Tasks 2 and 3. The BatchNorm scale and
+# bias parameters (gamma and beta) remain trainable."
+# ML CONCEPT — WHY FREEZE BN STATS IN DA:
+#   BatchNorm normalizes activations using running mean/variance. If we let those
+#   update on adaptation batches (which mix source+target), the statistics
+#   themselves would start adapting to the target distribution — an *implicit*,
+#   uncontrolled form of domain adaptation that would contaminate the comparison
+#   of the explicit alignment losses. Freezing the running stats keeps the study
+#   focused on the objectives we are actually testing. gamma/beta stay trainable
+#   because they are ordinary learnable parameters, not distribution statistics.
+freeze_bn_running_stats: true
+
+# -----------------------------------------------------------------------------
+# DOMAIN SEPARABILITY DIAGNOSTIC
+# -----------------------------------------------------------------------------
+# Spec: "Using seed 6304, create a 70/30 split and train a balanced logistic-
+# regression classifier with C=1 to distinguish source from target. Its held-out
+# accuracy is the domain separability score; 50% indicates chance performance."
+domain_separability:
+  test_frac: 0.30                  # 70/30 train/test split of the features
+  C: 1.0                           # inverse regularization strength for LogReg
+  class_weight: balanced           # 'balanced' logistic regression
+  max_features_per_group: 1500     # cap features per group for speed (equal #)
+
+# -----------------------------------------------------------------------------
+# METHOD (overridden by each method config)
+# -----------------------------------------------------------------------------
+method:
+  name: source_only                # one of: source_only | dan | dann | cdan
+
+# -----------------------------------------------------------------------------
+# OUTPUTS
+# -----------------------------------------------------------------------------
+paths:
+  results_dir: ./results
+  checkpoints_dir: ./results/checkpoints
+  shared_splits: ../shared/splits/pacs_sketch_seed6304.json

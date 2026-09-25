@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data_cache/
+task2/results/*
+!task2/results/.gitkeep
+shared/splits/pacs_sketch_seed6304.json

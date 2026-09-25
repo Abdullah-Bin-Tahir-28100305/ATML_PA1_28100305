@@ -1,0 +1,21 @@
+# =============================================================================
+# source_only.yaml  — Source-only ERM baseline (Step 1)
+# -----------------------------------------------------------------------------
+# Inherits everything from base.yaml; sets the method to source_only.
+#
+# ML CONCEPT — ERM (Empirical Risk Minimization):
+#   Plain supervised training on the labeled source domains with NO target
+#   alignment at all. It just minimizes cross-entropy over the pooled sources.
+#   This is the crucial BASELINE: it shows how far ordinary supervised learning
+#   transfers to the unseen target on its own. Every adaptation method is judged
+#   as an IMPROVEMENT (or regression = negative transfer) relative to this.
+#
+# IMPORTANT (cross-task link): this exact checkpoint is ALSO the ERM baseline for
+# Task 3 (spec: "Save this checkpoint and reuse it unchanged as the Task 3 ERM
+# baseline."). So this config must not be tuned differently later.
+# =============================================================================
+inherit: base.yaml                 # our loader merges base.yaml first
+
+method:
+  name: source_only
+  # No alignment loss => no extra hyperparameters. Only cross-entropy is used.

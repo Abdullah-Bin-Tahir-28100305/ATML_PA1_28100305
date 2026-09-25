@@ -1,0 +1,9 @@
+# Python caches
+__pycache__/
+*.pyc
+# Downloaded datasets and cached tensors (large; regenerated on run)
+data_cache/
+cache/
+# Generated outputs (regenerate with scripts/run_task1.py)
+results/*
+!results/.gitkeep

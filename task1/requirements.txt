@@ -1,0 +1,15 @@
+# =============================================================================
+# requirements.txt — Python dependencies for Task 1.
+# Install with:  pip install -r requirements.txt
+# Pinning is loose (>=) so it resolves on most recent setups; if you need exact
+# reproducibility, freeze your working versions with `pip freeze`.
+# =============================================================================
+torch>=2.0            # core deep-learning framework (tensors, autograd, nn)
+torchvision>=0.15     # pretrained ResNet-50, ViT-B/16 + dataset loaders (STL-10)
+open_clip_torch>=2.20 # OpenCLIP: CLIP ViT-B/32 with pretrained='openai'
+scikit-learn>=1.2     # macro-F1 metric and t-SNE dimensionality reduction
+numpy>=1.23           # array math throughout
+matplotlib>=3.6       # translation curves + t-SNE/UMAP figures
+PyYAML>=6.0           # parse configs/config.yaml
+# OPTIONAL — only needed if you set visualization.method: umap in the config.
+# umap-learn>=0.5

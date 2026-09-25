@@ -1,0 +1,34 @@
+# =============================================================================
+# sam.yaml  — SAM: Sharpness-Aware Minimization (Step 3)
+# -----------------------------------------------------------------------------
+# ML CONCEPT — SAM (Foret et al. 2021):
+#   Instead of aligning representations, SAM seeks parameters whose loss is
+#   locally FLAT (stable to small perturbations), by solving the min-max:
+#       min_theta  max_{||eps||<=rho}  L_ERM(theta + eps).
+#   Intuition: a flat minimum tends to generalize better than a sharp one. Each
+#   update is TWO passes:
+#     (1) compute gradient at theta, take a normalized ascent step of radius rho
+#         to the 'worst-case' nearby point  theta + eps,  eps = rho * g/||g||;
+#     (2) compute the gradient of L_ERM AT theta+eps, and apply THAT gradient to
+#         the ORIGINAL theta with the base optimizer (AdamW).
+#   SAM does not remove domain information; it tests whether a locally stable
+#   source solution transfers better to the unseen Sketch domain.
+#
+# Same base optimizer (AdamW), lr, and weight decay as ERM (spec). Frozen-BN
+# policy applies during BOTH SAM passes (spec).
+# =============================================================================
+inherit: base.yaml
+
+method:
+  name: sam
+  # Spec: "Use rho = 0.05 for the main comparison."
+  rho: 0.05
+
+# CONTROLLED DESIGN STUDY (Step 5) — the SAM option (alternative to DAN-DG's).
+# Spec: "or vary rho in {0.01, 0.05, 0.1} for SAM."
+# We enable the DAN-DG lambda sweep by default (see dan_dg.yaml). To run the SAM
+# study instead, set enabled: true here and enabled: false in dan_dg.yaml.
+controlled_study:
+  enabled: false
+  sweep_param: rho
+  sweep_values: [0.01, 0.05, 0.1]

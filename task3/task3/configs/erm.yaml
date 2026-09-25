@@ -1,0 +1,21 @@
+# =============================================================================
+# erm.yaml  — ERM baseline (Step 1)
+# -----------------------------------------------------------------------------
+# ML CONCEPT — ERM (Empirical Risk Minimization) for DG:
+#   Plain supervised cross-entropy on the three pooled labeled source domains,
+#   with domain-balanced batches so each source has equal influence:
+#       L_ERM = (1/3) sum_{e in {P,A,C}} R_e(theta).
+#   In DG this is the crucial baseline (Gulrajani & Lopez-Paz 2021 show a
+#   well-tuned ERM is a very strong DG baseline). DAN-DG and SAM are judged
+#   against it, and the SAME frozen ERM checkpoint is reused across the study.
+#
+# CROSS-TASK LINK (spec): this is the SAME model as Task 2's Source-only ERM.
+# If you have Task 2's checkpoint, set paths.task2_erm_checkpoint in base.yaml
+# (or pass --erm_checkpoint) to LOAD it rather than retrain, exactly as the
+# assignment requires. Otherwise Task 3 trains an equivalent ERM under the
+# identical protocol.
+# =============================================================================
+inherit: base.yaml
+
+method:
+  name: erm
